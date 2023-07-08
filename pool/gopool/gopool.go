@@ -43,11 +43,13 @@ func (this *funcn) run() {
 }
 
 type GoPool struct {
-	pool     chan *funcn
-	minlimit int64
-	maxlimit int64
-	id       int64
-	count    int64
+	pool      chan *funcn
+	minlimit  int64
+	maxlimit  int64
+	id        int64
+	count     int64
+	mux       *sync.Mutex
+	funcnPool chan func()
 }
 
 func NewPool(minlimit int64, maxlimit int64) *GoPool {
@@ -57,21 +59,34 @@ func NewPool(minlimit int64, maxlimit int64) *GoPool {
 	if maxlimit < minlimit {
 		p.maxlimit = minlimit
 	}
+	p.funcnPool = make(chan func(), 1<<25)
+	p.mux = &sync.Mutex{}
 	return p
 }
 
 func (this *GoPool) Go(f func()) {
-	var t *funcn
-	if count := atomic.AddInt64(&this.count, 1); count > this.minlimit && count <= this.maxlimit {
-		t = &funcn{task: make(chan func(), 1), id: atomic.AddInt64(&this.id, 1), pool: this}
-	} else if this.id > this.minlimit {
-		t = <-this.pool
-	} else if id := atomic.AddInt64(&this.id, 1); id <= this.minlimit {
-		t = &funcn{task: make(chan func(), 1), id: id, pool: this}
-	} else {
-		t = <-this.pool
+	this.funcnPool <- f
+	if this.mux.TryLock() {
+		go this.funcn()
 	}
-	t.add(f)
+}
+
+func (this *GoPool) funcn() {
+	defer this.mux.Unlock()
+	for len(this.funcnPool) > 0 {
+		var t *funcn
+		if count := atomic.AddInt64(&this.count, 1); count > this.minlimit && count <= this.maxlimit {
+			t = &funcn{task: make(chan func(), 1), id: atomic.AddInt64(&this.id, 1), pool: this}
+		} else if this.id > this.minlimit {
+			t = <-this.pool
+		} else if id := atomic.AddInt64(&this.id, 1); id <= this.minlimit {
+			t = &funcn{task: make(chan func(), 1), id: id, pool: this}
+		} else {
+			t = <-this.pool
+		}
+		t.add(<-this.funcnPool)
+	}
+	return
 }
 
 func (this *GoPool) put(f *funcn) (ok bool) {
