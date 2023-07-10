@@ -53,13 +53,17 @@ type GoPool struct {
 }
 
 func NewPool(minlimit int64, maxlimit int64) *GoPool {
+	return NewPoolWithFuncLimit(minlimit, maxlimit, 1<<17)
+}
+
+func NewPoolWithFuncLimit(minlimit int64, maxlimit int64, FuncLimit int) *GoPool {
 	p := &GoPool{}
 	p.pool = make(chan *funcn, minlimit)
 	p.minlimit, p.maxlimit = minlimit, maxlimit
 	if maxlimit < minlimit {
 		p.maxlimit = minlimit
 	}
-	p.funcnPool = make(chan func(), 1<<25)
+	p.funcnPool = make(chan func(), FuncLimit)
 	p.mux = &sync.Mutex{}
 	return p
 }
