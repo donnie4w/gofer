@@ -19,6 +19,7 @@ func Benchmark_gopool(b *testing.B) {
 			})
 		}
 	}
+	fmt.Println(">>>", pool.NumUnExecu())
 }
 
 func Benchmark_gof(b *testing.B) {
@@ -46,6 +47,7 @@ func BenchmarkParallel_gopool(b *testing.B) {
 			})
 		}
 	})
+	fmt.Println(">>>", pool.NumUnExecu())
 }
 
 func BenchmarkParallel_gof(b *testing.B) {
