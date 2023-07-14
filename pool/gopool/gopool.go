@@ -50,6 +50,8 @@ type GoPool struct {
 	count     int64
 	mux       *sync.Mutex
 	funcnPool chan func()
+	close     bool
+	_flag     int32
 }
 
 func NewPool(minlimit int64, maxlimit int64) *GoPool {
@@ -69,15 +71,39 @@ func NewPoolWithFuncLimit(minlimit int64, maxlimit int64, FuncLimit int) *GoPool
 }
 
 func (this *GoPool) Go(f func()) {
-	this.funcnPool <- f
-	if this.mux.TryLock() {
-		go this.funcn()
+	if !this.close && atomic.CompareAndSwapInt32(&this._flag, 0, 0) {
+		this.funcnPool <- f
+		if this.mux.TryLock() {
+			go this.funcn()
+		}
+	} else {
+		go f()
+	}
+}
+
+// the number of functions not executed
+func (this *GoPool) NumUnExecu() int {
+	return len(this.funcnPool)
+}
+
+// if set true :the pool will enable goroutine, and the func in the pool will be started with goroutine
+func (this *GoPool) Close() {
+	defer recover()
+	if atomic.CompareAndSwapInt32(&this._flag, 0, 1) {
+		this.close = true
+		for len(this.funcnPool) > 0 {
+			f := <-this.funcnPool
+			go f()
+		}
+		close(this.funcnPool)
+		close(this.pool)
 	}
 }
 
 func (this *GoPool) funcn() {
+	defer recover()
 	defer this.mux.Unlock()
-	for len(this.funcnPool) > 0 {
+	for len(this.funcnPool) > 0 && !this.close {
 		var t *funcn
 		if count := atomic.AddInt64(&this.count, 1); count > this.minlimit && count <= this.maxlimit {
 			t = &funcn{task: make(chan func(), 1), id: atomic.AddInt64(&this.id, 1), pool: this}
