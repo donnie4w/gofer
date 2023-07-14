@@ -86,7 +86,7 @@ func (this *GoPool) NumUnExecu() int {
 	return len(this.funcnPool)
 }
 
-// if set true :the pool will enable goroutine, and the func in the pool will be started with goroutine
+// when Close ,the pool will enable goroutine, and the func in the pool will be started with goroutine
 func (this *GoPool) Close() {
 	defer recover()
 	if atomic.CompareAndSwapInt32(&this._flag, 0, 1) {
