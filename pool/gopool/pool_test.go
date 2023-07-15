@@ -37,14 +37,19 @@ func Benchmark_gof(b *testing.B) {
 
 func BenchmarkParallel_gopool(b *testing.B) {
 	pool := NewPool(100, 100)
+	i := 0
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
+			i++
 			pool.Go(func() {
 				s := ""
 				for i := 0; i < 10; i++ {
 					s = fmt.Sprint(s, i)
 				}
 			})
+			if i == 3000 {
+				// pool.Close()
+			}
 		}
 	})
 	fmt.Println(">>>", pool.NumUnExecu())
