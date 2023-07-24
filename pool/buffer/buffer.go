@@ -25,15 +25,16 @@ func NewBufferPool(poolsize int) *BufferPool {
 	return p
 }
 
-func (this *BufferPool) Get(len int) *bytes.Buffer {
+func (this *BufferPool) Get(len int) (_r *bytes.Buffer) {
 	pre := this.getRouter(len)
-	return this.pool[pre].Get().(*bytes.Buffer)
+	_r = this.pool[pre].Get().(*bytes.Buffer)
+	_r.Reset()
+	return
 }
 
 func (this *BufferPool) Put(buf *bytes.Buffer) (ok bool) {
 	if buf != nil {
 		pre := this.getRouter(buf.Cap())
-		buf.Reset()
 		this.pool[pre].Put(buf)
 		ok = true
 	}
