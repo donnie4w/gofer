@@ -2,7 +2,7 @@
 // All rights reserved.
 // github.com/donnie4w/gofer
 
-package bufferpool
+package buffer
 
 import (
 	"bytes"
