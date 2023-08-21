@@ -48,18 +48,18 @@ END:
 }
 
 type GoPool struct {
-	pool      chan *funcn
-	minlimit  int64
-	maxlimit  int64
-	id        int64
-	count     int64
-	mux       *sync.Mutex
-	funcnPool chan func()
-	close     bool
-	_flag     int32
-	tnum      int64
-	ctx       context.Context
-	cancel    context.CancelFunc
+	pool       chan *funcn
+	minlimit   int64
+	maxlimit   int64
+	id         int64
+	count      int64
+	mux        *sync.Mutex
+	funcnPool  chan func()
+	close      bool
+	_closeflag int32
+	tnum       int64
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 func NewPool(minlimit int64, maxlimit int64) *GoPool {
@@ -99,7 +99,7 @@ func (this *GoPool) NumUnExecu() int {
 // when Close ,the pool will enable goroutine, and the func in the pool will be started with goroutine
 func (this *GoPool) Close() {
 	defer recover()
-	if atomic.CompareAndSwapInt32(&this._flag, 0, 1) {
+	if atomic.CompareAndSwapInt32(&this._closeflag, 0, 1) {
 		this.close = true
 		this.cancel()
 		go func() {
