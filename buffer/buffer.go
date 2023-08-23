@@ -40,6 +40,11 @@ func (b *Buffer) Bytes() []byte {
 }
 
 func NewBuffer() *Buffer {
+	b := make([]byte, 0)
+	return (*Buffer)(&b)
+}
+
+func NewBufferByPool() *Buffer {
 	return BufPool.Get()
 }
 
