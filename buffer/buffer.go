@@ -9,6 +9,19 @@ var BufPool = gobuffer.NewPool[Buffer](func() *Buffer {
 	return (*Buffer)(&b)
 }, func(b *Buffer) { b.Reset() })
 
+func NewBuffer() *Buffer {
+	b := make([]byte, 0)
+	return (*Buffer)(&b)
+}
+
+func NewBufferByPool() *Buffer {
+	return BufPool.Get()
+}
+
+func NewBufferBySlice(bs []byte) *Buffer {
+	return (*Buffer)(&bs)
+}
+
 type Buffer []byte
 
 func (b *Buffer) Reset() {
@@ -37,15 +50,6 @@ func (b *Buffer) WriteByte(c byte) error {
 
 func (b *Buffer) Bytes() []byte {
 	return []byte(*b)
-}
-
-func NewBuffer() *Buffer {
-	b := make([]byte, 0)
-	return (*Buffer)(&b)
-}
-
-func NewBufferByPool() *Buffer {
-	return BufPool.Get()
 }
 
 func (b *Buffer) Free() {
