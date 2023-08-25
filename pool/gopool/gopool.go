@@ -127,8 +127,10 @@ func (this *GoPool) funcn() {
 			} else {
 				t = <-this.pool
 			}
-			atomic.AddInt64(&this.tnum, -1)
 			t.add(f)
+		}
+		if atomic.AddInt64(&this.tnum, -1) <= 0 {
+			break
 		}
 	}
 	return
