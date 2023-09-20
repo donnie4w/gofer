@@ -103,16 +103,28 @@ func (this *GoPool) Close() {
 		this.close = true
 		this.cancel()
 		go func() {
-			<-time.After(5 * time.Second)
+			<-time.After(10 * time.Second)
 			close(this.funcnPool)
 		}()
 		close(this.pool)
 	}
 }
 
+func (this *GoPool) TurnOff(off bool) {
+	if atomic.CompareAndSwapInt32(&this._closeflag, 0, 0) && off {
+		this.close = true
+	} else if atomic.CompareAndSwapInt32(&this._closeflag, 0, 0) && !off {
+		this.close = false
+	}
+}
+
 func (this *GoPool) funcn() {
 	defer recover()
 	defer this.mux.Unlock()
+	this._funcn()
+}
+
+func (this *GoPool) _funcn() {
 	for f := range this.funcnPool {
 		if this.close {
 			go f()
@@ -133,12 +145,15 @@ func (this *GoPool) funcn() {
 			break
 		}
 	}
+	if this.tnum > 0 {
+		this._funcn()
+	}
 	return
 }
 
 func (this *GoPool) put(f *funcn) (ok bool) {
 	atomic.AddInt64(&this.count, -1)
-	if f.id <= this.minlimit && !this.close {
+	if f.id <= this.minlimit && atomic.CompareAndSwapInt32(&this._closeflag, 0, 0) {
 		this.pool <- f
 		ok = true
 	}
