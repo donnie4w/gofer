@@ -10,12 +10,23 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/gob"
+	"encoding/json"
 	"io"
 
 	"github.com/donnie4w/gothrift/thrift"
 
 	"github.com/golang/snappy"
 )
+
+func JsonEncode(v any) (bs []byte) {
+	bs, _ = json.Marshal(v)
+	return
+}
+
+func JsonDecode[T any](bs []byte) (_r T, err error) {
+	err = json.Unmarshal(bs, &_r)
+	return
+}
 
 func Encode(e any) (by []byte, err error) {
 	buf := new(bytes.Buffer)
@@ -131,7 +142,7 @@ func TDecode[T thrift.TStruct](bs []byte, ts T) (_r T, err error) {
 	return ts, err
 }
 
-func ZlibCz(bs []byte) (_r []byte, err error) {
+func Zlib(bs []byte) (_r []byte, err error) {
 	var buf bytes.Buffer
 	var compressor *zlib.Writer
 	if compressor, err = zlib.NewWriterLevel(&buf, zlib.BestCompression); err == nil {
@@ -145,18 +156,17 @@ func ZlibCz(bs []byte) (_r []byte, err error) {
 	return
 }
 
-func ZlibUnCz(bs []byte) (_r []byte, err error) {
+func UnZlib(bs []byte) (_r []byte, err error) {
 	var obuf bytes.Buffer
 	var read io.ReadCloser
 	if read, err = zlib.NewReader(bytes.NewReader(bs)); err == nil {
 		defer read.Close()
 		io.Copy(&obuf, read)
 		_r = obuf.Bytes()
-	} else {
-		_r = bs
 	}
 	return
 }
+
 
 func Gzip(bs []byte) (buf bytes.Buffer, err error) {
 	gw := gzip.NewWriter(&buf)
