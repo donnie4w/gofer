@@ -1,3 +1,6 @@
+// Copyright (c) , donnie <donnie4w@gmail.com>
+// All rights reserved.
+// github.com/donnie4w/gofer/pool/gopool
 package gopool
 
 import (
