@@ -90,17 +90,16 @@ func StrToTimeFormat(s string) (t time.Time, err error) {
 /***********************************************************/
 var __inc uint64
 var __pid = int64(os.Getpid())
-var _dir, _ = os.Getwd()
-var __dir = []byte(_dir)
+var _rid, _ = RandStrict(1<<63-1)
 func inc() uint64 {
 	return atomic.AddUint64(&__inc, 1)
 }
 
 func RandId() (rid int64) {
-	b := make([]byte, 16+len(__dir))
+	b := make([]byte, 24)
 	copy(b[0:8], Int64ToBytes(__pid))
 	copy(b[8:], Int64ToBytes(time.Now().UnixNano()))
-	copy(b[16:], __dir)
+	copy(b[16:], Int64ToBytes(_rid))
 	rid = int64(CRC32(b)&0x7fffffff)
 	rid = rid<<32 | int64(inc()&0x00000000ffffffff)
 	return
