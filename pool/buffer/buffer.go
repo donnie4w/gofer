@@ -1,6 +1,6 @@
 // Copyright (c) , donnie <donnie4w@gmail.com>
 // All rights reserved.
-// github.com/donnie4w/gofer
+// github.com/donnie4w/gofer/pool/buffer
 
 package buffer
 
