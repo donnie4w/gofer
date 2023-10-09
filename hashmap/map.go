@@ -51,7 +51,7 @@ func (this *MapL[K, V]) Del(key K) (ok bool) {
 }
 
 func (this *MapL[K, V]) Range(f func(k K, v V) bool) {
-	this.m.Range(func(k, v any) bool {
+	this.m.Range(func(k , v any) bool {
 		if v != nil {
 			return f(k.(K), v.(V))
 		} else {
@@ -118,9 +118,10 @@ func (this *Map[K, V]) Range(f func(k K, v V) bool) {
 		}
 	})
 }
+
 /***********************************************************/
 
-//the big numbers come front
+// the big numbers come front
 type SortMap[K int | int64 | int8 | int32 | string, V any] struct {
 	l   *list.List
 	m   *Map[K, V]
@@ -207,8 +208,6 @@ func (this *SortMap[K, V]) DelAndLoadBack() (k K, v V) {
 func (this *SortMap[K, V]) Len() int {
 	return this.l.Len()
 }
-
-
 
 /************************************************************/
 type LinkedMap[K, V any] struct {
@@ -324,7 +323,6 @@ func (this *LinkedMap[K, V]) FrontForEach(f func(k K, v V) bool) {
 	}
 }
 
-
 type LimitMap[K, V any] struct {
 	m     *sync.Map
 	ch    chan K
@@ -349,7 +347,10 @@ func (this *LimitMap[K, V]) Put(k K, v V) {
 
 func (this *LimitMap[K, V]) Get(k K) (_r V, b bool) {
 	if v, ok := this.m.Load(k); ok {
-		_r, b = v.(V), ok
+		if v != nil {
+			_r = v.(V)
+		}
+		b = ok
 	}
 	return
 }
