@@ -36,9 +36,10 @@ func Encode(e any) (by []byte, err error) {
 	return
 }
 
-func Decode(buf []byte, e any) (err error) {
+func Decode[T any](buf []byte) (_r *T, err error) {
 	decoder := gob.NewDecoder(bytes.NewReader(buf))
-	err = decoder.Decode(e)
+	_r = new(T)
+	err = decoder.Decode(_r)
 	return
 }
 
@@ -167,7 +168,6 @@ func UnZlib(bs []byte) (_r []byte, err error) {
 	return
 }
 
-
 func Gzip(bs []byte) (buf bytes.Buffer, err error) {
 	gw := gzip.NewWriter(&buf)
 	defer gw.Close()
@@ -192,7 +192,6 @@ func UnGzip(bs []byte) (_bb bytes.Buffer, err error) {
 	}
 	return
 }
-
 
 func CheckGzipType(bs []byte) (err error) {
 	if buf := bytes.NewReader(bs); buf != nil {
