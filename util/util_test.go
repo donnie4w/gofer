@@ -15,7 +15,7 @@ import (
 )
 
 func TestDataToBytes(t *testing.T) {
-	arr := []int64{1, 2, 3, 4}
+	arr := []int64{1<<60, 2<<60, 3, 4}
 	bs := IntArrayToBytes(arr)
 	fmt.Println(bs)
 	arr2 := BytesToIntArray(bs)
