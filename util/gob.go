@@ -59,7 +59,7 @@ func BytesToInt64(bs []byte) (_r int64) {
 	} else {
 		bs8 := make([]byte, 8)
 		for i, b := range bs {
-			bs8[7-i] = b
+			bs8[i+8-len(bs)] = b
 		}
 		_r = BytesToInt64(bs8)
 	}
@@ -90,7 +90,7 @@ func BytesToInt32(bs []byte) (_r int32) {
 	} else {
 		bs4 := make([]byte, 4)
 		for i, b := range bs {
-			bs4[3-i] = b
+			bs4[i+4-len(bs)] = b
 		}
 		_r = BytesToInt32(bs4)
 	}
@@ -105,7 +105,7 @@ func BytesToInt16(bs []byte) (_r int16) {
 	} else {
 		bs2 := make([]byte, 2)
 		for i, b := range bs {
-			bs2[1-i] = b
+			bs2[i+2-len(bs)] = b
 		}
 		_r = BytesToInt16(bs2)
 	}
@@ -206,5 +206,39 @@ func SnappyEncode(bs []byte) (_r []byte) {
 
 func SnappyDecode(bs []byte) (_r []byte) {
 	_r, _ = snappy.Decode(nil, bs)
+	return
+}
+
+var b58Alphabet = []byte("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+
+// https://en.bitcoin.it/wiki/Base58Check_encoding#Version_bytes
+// method based on base58
+func Base58EncodeForInt64(v uint64) (_r []byte) {
+	for v > 0 {
+		mod := v % 58
+		v /= 58
+		_r = append(_r, b58Alphabet[mod])
+	}
+	return reverseBytes(_r)
+}
+
+func reverseBytes(bytes []byte) []byte {
+	for i := 0; i < len(bytes)/2; i++ {
+		bytes[i], bytes[len(bytes)-1-i] = bytes[len(bytes)-1-i], bytes[i]
+	}
+	return bytes
+}
+
+func Base58DecodeForInt64(bs []byte) (_r uint64, ok bool) {
+	defer recover()
+	for _, b := range bs {
+		if idx := bytes.IndexByte(b58Alphabet, b); idx >= 0 {
+			_r *= 58
+			_r += uint64(idx)
+		} else {
+			return 0, false
+		}
+	}
+	ok = true
 	return
 }
