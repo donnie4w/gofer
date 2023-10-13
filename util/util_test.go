@@ -15,7 +15,7 @@ import (
 )
 
 func TestDataToBytes(t *testing.T) {
-	arr := []int64{1<<60, 2<<60, 3, 4}
+	arr := []int64{1 << 60, 2 << 60, 3, 4}
 	bs := IntArrayToBytes(arr)
 	fmt.Println(bs)
 	arr2 := BytesToIntArray(bs)
@@ -161,4 +161,20 @@ func BenchmarkParallel_RandID(b *testing.B) {
 		}
 	})
 	fmt.Println("len k >>", k)
+}
+
+func BenchmarkCrc(t *testing.B) {
+	fmt.Printf("CRC-8: %X\n", CRC8([]byte("12")))
+}
+
+func BenchmarkBase58(b *testing.B) {
+	bs := Base58EncodeForInt64(1 << 60)
+	fmt.Println(string(bs))
+	r, _ := Base58DecodeForInt64(bs)
+	fmt.Println(r == 1<<60)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bs := Base58EncodeForInt64(1234567891011)
+		Base58DecodeForInt64(bs)
+	}
 }
