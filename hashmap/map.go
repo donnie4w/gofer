@@ -51,7 +51,7 @@ func (this *MapL[K, V]) Del(key K) (ok bool) {
 }
 
 func (this *MapL[K, V]) Range(f func(k K, v V) bool) {
-	this.m.Range(func(k , v any) bool {
+	this.m.Range(func(k, v any) bool {
 		if v != nil {
 			return f(k.(K), v.(V))
 		} else {
@@ -408,27 +408,33 @@ func (this *Consistenthash) Add(keys ...int64) {
 	sort.Slice(this.keys, func(i, j int) bool { return this.keys[i] < this.keys[j] })
 }
 
-func (this *Consistenthash) Get(value int64) (node int64) {
+func (this *Consistenthash) Get(value int64) (node int64, ok bool) {
 	this.mux.RLock()
 	defer this.mux.RUnlock()
+	if this.keys == nil {
+		return
+	}
 	keyu64 := hash(int64ToBytes(value))
 	idx := sort.Search(len(this.keys), func(i int) bool { return this.keys[i] >= keyu64 })
 	if idx >= len(this.keys) {
 		idx = 0
 	}
-	node, _ = this.m.Get(this.keys[idx])
+	node, ok = this.m.Get(this.keys[idx])
 	return
 }
 
-func (this *Consistenthash) GetStr(value string) (node int64) {
+func (this *Consistenthash) GetStr(value string) (node int64, ok bool) {
 	this.mux.RLock()
 	defer this.mux.RUnlock()
+	if this.keys == nil {
+		return
+	}
 	keyu64 := hash([]byte(value))
 	idx := sort.Search(len(this.keys), func(i int) bool { return this.keys[i] >= keyu64 })
 	if idx >= len(this.keys) {
 		idx = 0
 	}
-	node, _ = this.m.Get(this.keys[idx])
+	node, ok = this.m.Get(this.keys[idx])
 	return
 }
 
