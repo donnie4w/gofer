@@ -34,7 +34,7 @@ func TestZlib(t *testing.T) {
 
 func Benchmark_md5(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		MD5("1234567890qwertyuiop")
+		Md5Str("1234567890qwertyuiop")
 	}
 }
 
