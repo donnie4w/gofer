@@ -36,7 +36,7 @@ func (this *storeAdmin) Load() {
 func (this *storeAdmin) PutAdmin(name, pwd string, _type int8) {
 	defer this.mux.Unlock()
 	this.mux.Lock()
-	this.kb.Admin[name] = &UserBean{name, util.MD5(pwd), _type}
+	this.kb.Admin[name] = &UserBean{name, util.Md5Str(pwd), _type}
 	KeyStore.Write(util.TEncode(this.kb))
 }
 
@@ -69,7 +69,7 @@ func (this *storeAdmin) AdminList() (ss []string) {
 func (this *storeAdmin) PutClient(name, pwd string, _type int8) {
 	defer this.mux.Unlock()
 	this.mux.Lock()
-	this.kb.Client[name] = &UserBean{name, util.MD5(pwd), _type}
+	this.kb.Client[name] = &UserBean{name, util.Md5Str(pwd), _type}
 	KeyStore.Write(util.TEncode(this.kb))
 }
 
@@ -102,7 +102,7 @@ func (this *storeAdmin) ClientList() (ss []string) {
 func (this *storeAdmin) PutMq(name, pwd string, _type int8) {
 	defer this.mux.Unlock()
 	this.mux.Lock()
-	this.kb.Mq[name] = &UserBean{name, util.MD5(pwd), _type}
+	this.kb.Mq[name] = &UserBean{name, util.Md5Str(pwd), _type}
 	KeyStore.Write(util.TEncode(this.kb))
 }
 
