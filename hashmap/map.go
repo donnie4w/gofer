@@ -11,6 +11,8 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	. "github.com/donnie4w/gofer/buffer"
 )
 
 type MapL[K any, V any] struct {
@@ -399,7 +401,11 @@ func (this *Consistenthash) Add(keys ...int64) {
 		if _, ok := this._m[key]; !ok {
 			this._m[key] = 0
 			for i := 0; i < this.replicas; i++ {
-				h := hash(append(int64ToBytes(int64(i)), int64ToBytes(key)...))
+				buf := NewBufferByPool()
+				buf.Write(int64ToBytes(int64(i)))
+				buf.Write(int64ToBytes(key))
+				h := hash(buf.Bytes())
+				buf.Free()
 				this.keys = append(this.keys, h)
 				this.m.Put(h, key)
 			}
@@ -438,6 +444,35 @@ func (this *Consistenthash) GetStr(value string) (node int64, ok bool) {
 	return
 }
 
+func (this *Consistenthash) GetNextNodeStr(value string, step int) (nodes []int64, ok bool) {
+	this.mux.RLock()
+	defer this.mux.RUnlock()
+	if this.keys == nil {
+		return
+	}
+	keyu64 := hash([]byte(value))
+	idx := sort.Search(len(this.keys), func(i int) bool { return this.keys[i] >= keyu64 })
+	if idx >= len(this.keys) {
+		idx = 0
+	}
+	n1, ok := this.m.Get(this.keys[idx])
+	m := map[int64]int8{}
+	nodes = make([]int64, 0)
+	for idx < len(this.keys)-1 {
+		idx++
+		if node, ok := this.m.Get(this.keys[idx]); ok && node != n1 {
+			if _, ok := m[node]; !ok {
+				m[node] = 0
+				nodes = append(nodes, node)
+			}
+		}
+		if len(nodes) == step {
+			return
+		}
+	}
+	return
+}
+
 func (this *Consistenthash) Del(key int64) {
 	this.mux.Lock()
 	defer this.mux.Unlock()
@@ -454,4 +489,14 @@ func (this *Consistenthash) Del(key int64) {
 		sort.Slice(this.keys, func(i, j int) bool { return this.keys[i] < this.keys[j] })
 		delete(this._m, key)
 	}
+}
+
+func (this *Consistenthash) Nodes() (_r []int64) {
+	this.mux.Lock()
+	defer this.mux.Unlock()
+	_r = make([]int64, 0)
+	for k := range this._m {
+		_r = append(_r, k)
+	}
+	return
 }
