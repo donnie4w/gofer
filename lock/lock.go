@@ -101,21 +101,25 @@ func (this *Await[T]) Get(idx int64) (ch chan T) {
 
 func (this *Await[T]) DelAndClose(idx int64) {
 	defer recover()
-	defer this.mux.Unlock(idx)
-	this.mux.Lock(idx)
-	if o, ok := this.m.Get(idx); ok {
-		close(o)
-		this.m.Del(idx)
+	if this.m.Has(idx) {
+		defer this.mux.Unlock(idx)
+		this.mux.Lock(idx)
+		if o, ok := this.m.Get(idx); ok {
+			close(o)
+			this.m.Del(idx)
+		}
 	}
 }
 
 func (this *Await[T]) DelAndPut(idx int64, v T) {
 	defer recover()
-	defer this.mux.Unlock(idx)
-	this.mux.Lock(idx)
-	if o, ok := this.m.Get(idx); ok {
-		o <- v
-		this.m.Del(idx)
+	if this.m.Has(idx) {
+		this.mux.Lock(idx)
+		defer this.mux.Unlock(idx)
+		if o, ok := this.m.Get(idx); ok {
+			o <- v
+			this.m.Del(idx)
+		}
 	}
 }
 
