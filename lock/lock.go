@@ -89,8 +89,8 @@ func NewAwait[T any](muxlimit int) *Await[T] {
 }
 
 func (this *Await[T]) Get(idx int64) (ch chan T) {
-	defer this.mux.Unlock(idx)
 	this.mux.Lock(idx)
+	defer this.mux.Unlock(idx)
 	var ok bool
 	if ch, ok = this.m.Get(idx); !ok {
 		ch = make(chan T, 1)
@@ -99,11 +99,15 @@ func (this *Await[T]) Get(idx int64) (ch chan T) {
 	return
 }
 
+func (this *Await[T]) Has(idx int64) bool {
+	return this.m.Has(idx)
+}
+
 func (this *Await[T]) DelAndClose(idx int64) {
 	defer recover()
 	if this.m.Has(idx) {
-		defer this.mux.Unlock(idx)
 		this.mux.Lock(idx)
+		defer this.mux.Unlock(idx)
 		if o, ok := this.m.Get(idx); ok {
 			close(o)
 			this.m.Del(idx)
