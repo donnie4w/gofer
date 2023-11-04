@@ -47,7 +47,6 @@ func SHA1(bs []byte) []byte {
 	return m.Sum(nil)
 }
 
-
 func Sha1Str(s string) string {
 	return strings.ToUpper(hex.EncodeToString(SHA1([]byte(s))))
 }
@@ -107,8 +106,9 @@ func StrToTimeFormat(s string) (t time.Time, err error) {
 
 /***********************************************************/
 var __inc uint64
-var __pid = int64(os.Getpid())
+var __pid = Int64ToBytes(int64(os.Getpid()))
 var _rid, _ = RandStrict(1<<63 - 1)
+var rids = Int64ToBytes(_rid)
 
 func inc() uint64 {
 	return atomic.AddUint64(&__inc, 1)
@@ -116,9 +116,9 @@ func inc() uint64 {
 
 func RandId() (rid int64) {
 	b := make([]byte, 24)
-	copy(b[0:8], Int64ToBytes(__pid))
+	copy(b[0:8], __pid)
 	copy(b[8:], Int64ToBytes(time.Now().UnixNano()))
-	copy(b[16:], Int64ToBytes(_rid))
+	copy(b[16:], rids)
 	rid = int64(CRC32(b) & 0x7fffffff)
 	rid = rid<<32 | int64(inc()&0x00000000ffffffff)
 	return
