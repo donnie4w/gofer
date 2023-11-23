@@ -6,6 +6,8 @@
 package buffer
 
 import (
+	"io"
+
 	gobuffer "github.com/donnie4w/gofer/pool/buffer"
 )
 
@@ -58,13 +60,31 @@ func (b *Buffer) Bytes() []byte {
 }
 
 func (b *Buffer) Free() {
-	if cap(*b) <= 1<<14 {
-		BufPool.Put(&b)
-	}
+	BufPool.Put(&b)
 }
 
 func (b *Buffer) Len() int {
 	return len([]byte(*b))
+}
+
+func (b *Buffer) Read(p []byte) (n int, err error) {
+	if b == nil {
+		if len(p) == 0 {
+			return 0, nil
+		}
+		return 0, io.EOF
+	}
+	if n = copy(p, *b); n < b.Len() {
+		*b = (*b)[n:]
+	}
+	return n, nil
+}
+
+func (b *Buffer) String() string {
+	if b != nil {
+		return string(b.Bytes())
+	}
+	return ""
 }
 
 func int32ToBytes(n int32) (bs []byte) {
