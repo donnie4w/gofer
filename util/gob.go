@@ -128,10 +128,10 @@ func BytesToIntArray(bs []byte) (data []int64) {
 var tconf = &thrift.TConfiguration{}
 
 func TEncode(ts thrift.TStruct) (_r []byte) {
-	buf := &thrift.TMemoryBuffer{Buffer: bytes.NewBuffer([]byte{})}
+	buf := thrift.NewTMemoryBuffer()
 	protocol := thrift.NewTCompactProtocolConf(buf, tconf)
-	ts.Write(context.Background(), protocol)
-	protocol.Flush(context.Background())
+	ts.Write(context.TODO(), protocol)
+	protocol.Flush(context.TODO())
 	_r = buf.Bytes()
 	return
 }
@@ -139,7 +139,7 @@ func TEncode(ts thrift.TStruct) (_r []byte) {
 func TDecode[T thrift.TStruct](bs []byte, ts T) (_r T, err error) {
 	buf := &thrift.TMemoryBuffer{Buffer: bytes.NewBuffer(bs)}
 	protocol := thrift.NewTCompactProtocolConf(buf, tconf)
-	err = ts.Read(context.Background(), protocol)
+	err = ts.Read(context.TODO(), protocol)
 	return ts, err
 }
 
