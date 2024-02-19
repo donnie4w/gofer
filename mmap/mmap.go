@@ -14,7 +14,7 @@ func NewMMAP(f *os.File, startOffset int64) (m *Mmap, err error) {
 		return nil, err
 	}
 	if fif.Size() == 0 {
-		return nil, errors.New("The file capacity is zero")
+		return nil, errors.New("the file capacity is zero")
 	}
 
 	_mmap, err := gommap.Map(f, gommap.RDWR, 0)
@@ -22,7 +22,7 @@ func NewMMAP(f *os.File, startOffset int64) (m *Mmap, err error) {
 		return nil, err
 	}
 	if startOffset >= fif.Size() {
-		return nil, errors.New("Offset Exceeds the file limit")
+		return nil, errors.New("offset Exceeds the file limit")
 	}
 	m = &Mmap{File: f, _mmap: _mmap, maxsize: fif.Size(), mux: sync.Mutex{}, offset: startOffset}
 	return
@@ -36,62 +36,62 @@ type Mmap struct {
 	mux     sync.Mutex
 }
 
-func (this *Mmap) Append(bs []byte) (n int64, err error) {
-	this.mux.Lock()
-	if this.offset+int64(len(bs)) > int64(int(this.maxsize)) {
-		err = errors.New("Exceeding file size limit")
+func (t *Mmap) Append(bs []byte) (n int64, err error) {
+	t.mux.Lock()
+	if t.offset+int64(len(bs)) > int64(int(t.maxsize)) {
+		err = errors.New("exceeding file size limit")
 		return
 	}
-	n = this.offset
-	this.offset += int64(len(bs))
-	this.mux.Unlock()
-	copy(this._mmap[n:int(n)+len(bs)], bs)
+	n = t.offset
+	t.offset += int64(len(bs))
+	t.mux.Unlock()
+	copy(t._mmap[n:int(n)+len(bs)], bs)
 	return
 }
 
-func (this *Mmap) AppendSync(bs []byte) (n int64, err error) {
-	if n, err = this.Append(bs); err == nil {
-		err = mmapSyncToDisk(this.File, this._mmap[n:int(n)+len(bs)])
+func (t *Mmap) AppendSync(bs []byte) (n int64, err error) {
+	if n, err = t.Append(bs); err == nil {
+		err = mmapSyncToDisk(t.File, t._mmap[n:int(n)+len(bs)])
 	}
 	return
 }
 
-func (this *Mmap) Write(bs []byte, offset int) (err error) {
-	this.mux.Lock()
-	if offset+len(bs) > int(this.maxsize) {
-		err = errors.New("Exceeding file size limit")
+func (t *Mmap) Write(bs []byte, offset int) (err error) {
+	t.mux.Lock()
+	if offset+len(bs) > int(t.maxsize) {
+		err = errors.New("exceeding file size limit")
 		return
 	}
-	if int64(offset+len(bs)) > this.offset {
-		this.offset = int64(offset + len(bs))
+	if int64(offset+len(bs)) > t.offset {
+		t.offset = int64(offset + len(bs))
 	}
-	this.mux.Unlock()
-	copy(this._mmap[offset:offset+len(bs)], bs)
+	t.mux.Unlock()
+	copy(t._mmap[offset:offset+len(bs)], bs)
 	return
 }
 
-func (this *Mmap) WriteSync(bs []byte, offset int) (err error) {
-	if err = this.Write(bs, offset); err == nil {
-		err = mmapSyncToDisk(this.File, this._mmap[offset:offset+len(bs)])
+func (t *Mmap) WriteSync(bs []byte, offset int) (err error) {
+	if err = t.Write(bs, offset); err == nil {
+		err = mmapSyncToDisk(t.File, t._mmap[offset:offset+len(bs)])
 	}
 	return
 }
 
-func (this *Mmap) Unmap() error {
-	return this._mmap.Unmap()
+func (t *Mmap) Unmap() error {
+	return t._mmap.Unmap()
 }
 
-func (this *Mmap) Flush() error {
-	return this._mmap.Flush()
+func (t *Mmap) Flush() error {
+	return t._mmap.Flush()
 }
 
-func (this *Mmap) Bytes() []byte {
-	return this._mmap
+func (t *Mmap) Bytes() []byte {
+	return t._mmap
 }
 
-func (this *Mmap) Close() (err error) {
-	if err = this.Flush(); err == nil {
-		err = this.Unmap()
+func (t *Mmap) Close() (err error) {
+	if err = t.Flush(); err == nil {
+		err = t.Unmap()
 	}
 	return
 }
