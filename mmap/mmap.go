@@ -24,7 +24,7 @@ func NewMMAP(f *os.File, startOffset int64) (m *Mmap, err error) {
 	if startOffset >= fif.Size() {
 		return nil, errors.New("offset Exceeds the file limit")
 	}
-	m = &Mmap{File: f, _mmap: _mmap, maxsize: fif.Size(), mux: sync.Mutex{}, offset: startOffset}
+	m = &Mmap{File: f, _mmap: _mmap, maxsize: fif.Size(), mux: &sync.Mutex{}, offset: startOffset}
 	return
 }
 
@@ -33,13 +33,14 @@ type Mmap struct {
 	_mmap   gommap.MMap
 	offset  int64
 	maxsize int64
-	mux     sync.Mutex
+	mux     *sync.Mutex
 }
 
 func (t *Mmap) Append(bs []byte) (n int64, err error) {
 	t.mux.Lock()
-	if t.offset+int64(len(bs)) > int64(int(t.maxsize)) {
+	if t.offset+int64(len(bs)) > t.maxsize {
 		err = errors.New("exceeding file size limit")
+		t.mux.Unlock()
 		return
 	}
 	n = t.offset
@@ -60,6 +61,7 @@ func (t *Mmap) Write(bs []byte, offset int) (err error) {
 	t.mux.Lock()
 	if offset+len(bs) > int(t.maxsize) {
 		err = errors.New("exceeding file size limit")
+		t.mux.Unlock()
 		return
 	}
 	if int64(offset+len(bs)) > t.offset {
@@ -79,6 +81,13 @@ func (t *Mmap) WriteSync(bs []byte, offset int) (err error) {
 
 func (t *Mmap) Unmap() error {
 	return t._mmap.Unmap()
+}
+
+func (t *Mmap) UnmapAndCloseFile() (err error) {
+	if err = t._mmap.Unmap(); err == nil {
+		err = t.File.Close()
+	}
+	return
 }
 
 func (t *Mmap) Flush() error {
