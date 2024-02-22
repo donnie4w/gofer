@@ -347,6 +347,23 @@ func (this *LimitMap[K, V]) Put(k K, v V) {
 	}
 }
 
+func (this *LimitMap[K, V]) LoadOrStore(k K, v V) (actual V, loaded bool) {
+	if previous, ok := this.m.LoadOrStore(k, v); !ok {
+		if atomic.AddInt64(&this.count, 1) >= this.limit {
+			if _, ok := this.m.LoadAndDelete(<-this.ch); ok {
+				atomic.AddInt64(&this.count, -1)
+			}
+		}
+		this.ch <- k
+	} else {
+		if previous != nil {
+			actual = previous.(V)
+		}
+		loaded = ok
+	}
+	return
+}
+
 func (this *LimitMap[K, V]) Get(k K) (_r V, b bool) {
 	if v, ok := this.m.Load(k); ok {
 		if v != nil {
