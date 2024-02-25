@@ -1,5 +1,5 @@
-//go:build !windows && !wasm
-// +build !windows,!wasm
+//go:build !windows && !wasm && !solaris
+// +build !windows,!wasm,!solaris
 
 package mmap
 
