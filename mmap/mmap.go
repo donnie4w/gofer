@@ -52,7 +52,7 @@ func (t *Mmap) Append(bs []byte) (n int64, err error) {
 
 func (t *Mmap) AppendSync(bs []byte) (n int64, err error) {
 	if n, err = t.Append(bs); err == nil {
-		err = mmapSyncToDisk(t.File, t._mmap[n:int(n)+len(bs)])
+		err = mmapSyncToDisk(t.File, t._mmap, n, len(bs))
 	}
 	return
 }
@@ -74,7 +74,7 @@ func (t *Mmap) Write(bs []byte, offset int) (err error) {
 
 func (t *Mmap) WriteSync(bs []byte, offset int) (err error) {
 	if err = t.Write(bs, offset); err == nil {
-		err = mmapSyncToDisk(t.File, t._mmap[offset:offset+len(bs)])
+		err = mmapSyncToDisk(t.File, t._mmap, int64(offset), len(bs))
 	}
 	return
 }

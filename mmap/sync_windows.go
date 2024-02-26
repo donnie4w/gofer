@@ -10,9 +10,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func mmapSyncToDisk(file *os.File, mappedMemory []byte) (err error) {
+func mmapSyncToDisk(file *os.File, mappedMemory []byte, n int64, length int) (err error) {
 	hFile := windows.Handle(file.Fd())
-	err = windows.FlushViewOfFile(uintptr(unsafe.Pointer(&mappedMemory[0])), uintptr(len(mappedMemory)))
+	bs := mappedMemory[n:(n + int64(length))]
+	err = windows.FlushViewOfFile(uintptr(unsafe.Pointer(&bs[0])), uintptr(len(bs)))
 	if err == nil {
 		err = windows.FlushFileBuffers(hFile)
 	}
