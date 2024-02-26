@@ -12,13 +12,16 @@ import (
 )
 
 func mmapSyncToDisk(file *os.File, mappedMemory []byte, n int64, length int) (err error) {
-	ptr := unsafe.Pointer(&mappedMemory[0])
-	leng := uintptr(length)
-
+	pageSize := int64(unix.Getpagesize())
+	var ptr unsafe.Pointer
+	var leng uintptr
+	p := n / pageSize
+	alignedStart := p * pageSize
+	ptr = unsafe.Pointer(&mappedMemory[int(alignedStart)])
+	leng = uintptr(int(n-alignedStart) + length)
 	_, _, errno := unix.Syscall6(unix.SYS_MSYNC, uintptr(ptr), leng, unix.MS_SYNC, 0, 0, 0)
 	if errno != 0 {
 		return fmt.Errorf("msync failed: %v", errno)
 	}
-
 	return nil
 }
