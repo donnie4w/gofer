@@ -13,9 +13,12 @@ import (
 
 func mmapSyncToDisk(file *os.File, mappedMemory []byte) (err error) {
 	ptr := unsafe.Pointer(&mappedMemory[0])
-	_, _, errno := unix.Syscall(unix.SYS_MSYNC, uintptr(ptr), uintptr(len(mappedMemory)), unix.MS_SYNC)
+	length := uintptr(len(mappedMemory))
+
+	_, _, errno := unix.Syscall6(unix.SYS_MSYNC, uintptr(ptr), length, unix.MS_SYNC, 0, 0, 0)
 	if errno != 0 {
-		err = fmt.Errorf("msync failed: %v", errno)
+		return fmt.Errorf("msync failed: %v", errno)
 	}
-	return
+
+	return nil
 }
