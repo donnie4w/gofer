@@ -1,3 +1,7 @@
+// Copyright (c) , donnie <donnie4w@gmail.com>
+// All rights reserved.
+//
+// github.com/donnie4w/gofer/image
 package image
 
 import (
@@ -5,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
 
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
+	"github.com/donnie4w/gofer/buffer"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
 )
@@ -24,7 +30,6 @@ const (
 	THUMBNAIL
 )
 
-// size
 const (
 	Mode0 Mode = iota
 	Mode1
@@ -34,66 +39,100 @@ const (
 	Mode5
 )
 
-// adjust
-const (
-	AdMode0 AdMode = iota //Original
-	AdMode1               //Gray
-	AdMode2               //Invert
-)
+type Options struct {
+	Gray   bool
+	Invert bool
+	Format string
+	Rotate int
+	FlipH  bool
+	FlipV  bool
+}
 
-func Resize(srcData []byte, width, height int, mode Mode, admode AdMode) (destData []byte, err error) {
+func Encode(srcData []byte, width, height int, mode Mode, options *Options) (destData []byte, err error) {
 	defer func() {
 		if er := recover(); er != nil {
 			err = errors.New(fmt.Sprint(er))
 		}
 	}()
-	if width == 0 && height == 0 {
+
+	img, _, er := image.Decode(bytes.NewReader(srcData))
+
+	if er != nil {
 		return srcData, nil
 	}
-	img, _, er := image.Decode(bytes.NewReader(srcData))
-	w := img.Bounds().Dx()
-	h := img.Bounds().Dy()
-	nw, nh, resizeType := praseMode(mode, w, h, width, height)
-	if er == nil {
 
-		switch admode {
-		case AdMode1:
-			img = convertToGrayByImage(img)
-		case AdMode2:
-			img = invertByImage(img)
+	if width > 0 || height > 0 {
+		w := img.Bounds().Dx()
+		h := img.Bounds().Dy()
+		nw, nh, resizeType := praseMode(mode, w, h, width, height)
+		if er == nil {
+			switch resizeType {
+			case SCALE:
+				img = imaging.Resize(img, nw, nh, imaging.Lanczos)
+			case THUMBNAIL:
+				img = imaging.Fill(img, nw, nh, imaging.Center, imaging.Lanczos)
+			}
 		}
+	}
 
-		var nrgba *image.NRGBA
-		switch resizeType {
-		case SCALE:
-			nrgba = imaging.Resize(img, nw, nh, imaging.Lanczos)
-		case THUMBNAIL:
-			nrgba = imaging.Fill(img, nw, nh, imaging.Center, imaging.Lanczos)
-		}
+	if options == nil {
+		options = &Options{}
+	}
 
-		var buf bytes.Buffer
-		switch imageType(srcData) {
-		case "jpeg":
-			err = jpeg.Encode(&buf, nrgba, nil)
-		case "png":
-			err = png.Encode(&buf, nrgba)
-		case "gif":
-			err = gif.Encode(&buf, nrgba, nil)
-		case "bmp":
-			err = bmp.Encode(&buf, nrgba)
-		case "tiff":
-			err = tiff.Encode(&buf, nrgba, nil)
-		case "webp":
-			err = webp.Encode(&buf, nrgba, nil)
-		default:
-			return srcData, nil
-		}
-		if err == nil {
+	if options.Gray {
+		img = convertToGrayByImage(img)
+	}
+
+	if options.Invert {
+		img = invertByImage(img)
+	}
+
+	if options.Rotate != 0 {
+		img = rotateImage(img, options.Rotate)
+	}
+
+	if options.FlipH {
+		img = flipHImage(img)
+	}
+
+	if options.FlipV {
+		img = flipVImage(img)
+	}
+
+	if options.Format != "" {
+		if buf, err := convertImageFormat(img, options.Format); err == nil {
 			return buf.Bytes(), nil
 		}
 	}
 
+	var buf bytes.Buffer
+	switch imageType(srcData) {
+	case "jpeg":
+		err = jpeg.Encode(&buf, img, nil)
+	case "png":
+		err = png.Encode(&buf, img)
+	case "gif":
+		err = gif.Encode(&buf, img, nil)
+	case "bmp":
+		err = bmp.Encode(&buf, img)
+	case "tiff":
+		err = tiff.Encode(&buf, img, nil)
+	case "webp":
+		err = webp.Encode(&buf, img, nil)
+	default:
+		return srcData, nil
+	}
+	if err == nil {
+		return buf.Bytes(), nil
+	}
 	return srcData, nil
+}
+
+func Resize(srcData []byte, width, height int, mode Mode) (destData []byte, err error) {
+	if width == 0 && height == 0 {
+		return srcData, nil
+	}
+	return Encode(srcData, width, height, mode, nil)
 }
 
 func imageType(srcData []byte) (s string) {
@@ -222,4 +261,88 @@ func getMax(w, h, width, height int, isThubnail bool) (nw, nh int) {
 		}
 	}
 	return w, h
+}
+
+func QualityByBinary(srcData []byte, quality int) (_r []byte, err error) {
+	if quality > 10 {
+		quality = quality%10 + 1
+	}
+	img, _, er := image.Decode(bytes.NewReader(srcData))
+	if er != nil {
+		return nil, er
+	}
+
+	if _r, err = Quality(img, imageType(srcData), quality); err != nil || _r == nil {
+		_r = srcData
+	}
+	return
+}
+
+func Quality(img image.Image, imagetype string, quality int) (_r []byte, err error) {
+	if quality > 10 {
+		quality = quality%10 + 1
+	}
+	buf := buffer.NewBuffer()
+	switch imagetype {
+	case "jpeg":
+		err = jpeg.Encode(buf, img, &jpeg.Options{Quality: int(float64(quality) * 7.5)})
+	case "png":
+		level := png.BestCompression
+		if quality >= 8 {
+			level = png.BestSpeed
+		} else if quality >= 4 {
+			level = png.DefaultCompression
+		}
+		options := &png.Encoder{
+			CompressionLevel: level,
+		}
+		err = options.Encode(buf, img)
+	case "gif":
+		err = gif.Encode(buf, img, &gif.Options{NumColors: int(float64(quality) * 25.6)})
+	case "tiff":
+		err = tiff.Encode(buf, img, &tiff.Options{Compression: tiff.Deflate, Predictor: true})
+	case "webp":
+		err = webp.Encode(buf, img, &webp.Options{Quality: float32(quality * 9)})
+	}
+	if err == nil && buf.Len() > 0 {
+		return buf.Bytes(), nil
+	} else {
+		return nil, err
+	}
+}
+
+func convertImageFormat(img image.Image, format string) (buff bytes.Buffer, err error) {
+	switch format {
+	case "jpg":
+		fallthrough
+	case "jpeg":
+		err = imaging.Encode(&buff, img, imaging.JPEG)
+	case "png":
+		err = imaging.Encode(&buff, img, imaging.PNG)
+	case "gif":
+		err = imaging.Encode(&buff, img, imaging.GIF)
+	case "bmp":
+		err = imaging.Encode(&buff, img, imaging.BMP)
+	case "tif":
+		fallthrough
+	case "tiff":
+		err = imaging.Encode(&buff, img, imaging.TIFF)
+	case "webp":
+		err = webp.Encode(&buff, img, &webp.Options{Lossless: true})
+	default:
+		return buff, fmt.Errorf("unsupported image format: %s", format)
+	}
+	return
+}
+
+func rotateImage(img image.Image, degrees int) image.Image {
+	return imaging.Rotate(img, float64(degrees), color.Transparent)
+}
+
+func flipHImage(img image.Image) image.Image {
+	return imaging.FlipH(img)
+}
+
+func flipVImage(img image.Image) image.Image {
+	return imaging.FlipV(img)
 }

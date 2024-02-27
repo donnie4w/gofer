@@ -1,3 +1,7 @@
+// Copyright (c) , donnie <donnie4w@gmail.com>
+// All rights reserved.
+//
+// github.com/donnie4w/gofer/image
 package image
 
 import (
