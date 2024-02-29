@@ -40,12 +40,17 @@ const (
 )
 
 type Options struct {
-	Gray   bool
-	Invert bool
-	Format string
-	Rotate int
-	FlipH  bool
-	FlipV  bool
+	Gray       bool
+	Invert     bool
+	Format     string
+	Rotate     int
+	FlipH      bool
+	FlipV      bool
+	Colors     int
+	Quality    int
+	CropAnchor []int
+	CropSide   []int
+	Blur       float64
 }
 
 func Encode(srcData []byte, width, height int, mode Mode, options *Options) (destData []byte, err error) {
@@ -61,6 +66,22 @@ func Encode(srcData []byte, width, height int, mode Mode, options *Options) (des
 		return srcData, nil
 	}
 
+	if options == nil {
+		options = &Options{}
+	}
+
+	if options.CropAnchor != nil && len(options.CropAnchor) == 4 {
+		if i, err := cropImageByAnchor(img, options.CropAnchor[0], options.CropAnchor[1], options.CropAnchor[2], options.CropAnchor[3]); err == nil {
+			img = i
+		}
+	}
+
+	if options.CropSide != nil && len(options.CropSide) == 4 {
+		if i, err := cropImageBySide(img, options.CropSide[0], options.CropSide[1], options.CropSide[2], options.CropSide[3]); err == nil {
+			img = i
+		}
+	}
+
 	if width > 0 || height > 0 {
 		w := img.Bounds().Dx()
 		h := img.Bounds().Dy()
@@ -73,10 +94,6 @@ func Encode(srcData []byte, width, height int, mode Mode, options *Options) (des
 				img = imaging.Fill(img, nw, nh, imaging.Center, imaging.Lanczos)
 			}
 		}
-	}
-
-	if options == nil {
-		options = &Options{}
 	}
 
 	if options.Gray {
@@ -97,6 +114,10 @@ func Encode(srcData []byte, width, height int, mode Mode, options *Options) (des
 
 	if options.FlipV {
 		img = flipVImage(img)
+	}
+
+	if options.Blur > 0 {
+		img = blurGaussianImage(img, options.Blur)
 	}
 
 	if options.Format != "" {
