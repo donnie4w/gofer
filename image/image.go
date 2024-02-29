@@ -50,6 +50,7 @@ type Options struct {
 	CropAnchor []int
 	CropSide   []int
 	Blur       float64
+	Scale      []int
 }
 
 func Encode(srcData []byte, width, height int, mode Mode, options *Options) (destData []byte, err error) {
@@ -77,6 +78,16 @@ func Encode(srcData []byte, width, height int, mode Mode, options *Options) (des
 
 	if options.CropSide != nil && len(options.CropSide) == 4 {
 		if i, err := cropImageBySide(img, options.CropSide[0], options.CropSide[1], options.CropSide[2], options.CropSide[3]); err == nil {
+			img = i
+		}
+	}
+
+	if options.Scale != nil && len(options.Scale) >= 2 {
+		maxPixel := 0
+		if len(options.Scale) == 3 {
+			maxPixel = options.Scale[2]
+		}
+		if i, err := scaleImageWithRatio(img, options.Scale[0], options.Scale[1], maxPixel); err == nil {
 			img = i
 		}
 	}
