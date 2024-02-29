@@ -23,7 +23,6 @@ import (
 
 type ResizeType int
 type Mode int8
-type AdMode int8
 
 const (
 	SCALE ResizeType = iota
