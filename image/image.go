@@ -13,10 +13,12 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"sort"
 
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"github.com/donnie4w/gofer/buffer"
+	"github.com/donnie4w/ico"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
 )
@@ -53,14 +55,66 @@ type Options struct {
 	Scale      []int
 }
 
-func Encode(srcData []byte, width, height int, mode Mode, options *Options) (destData []byte, err error) {
+type ResampleFilter int
+
+const (
+	// NearestNeighbor is a nearest-neighbor filter (no anti-aliasing).
+	NearestNeighbor ResampleFilter = iota
+
+	// Box filter (averaging pixels).
+	Box
+
+	// Linear filter.
+	Linear
+
+	// Hermite cubic spline filter (BC-spline; B=0; C=0).
+	Hermite
+
+	// MitchellNetravali is Mitchell-Netravali cubic filter (BC-spline; B=1/3; C=1/3).
+	MitchellNetravali
+
+	// CatmullRom is a Catmull-Rom - sharp cubic filter (BC-spline; B=0; C=0.5).
+	CatmullRom
+
+	// BSpline is a smooth cubic filter (BC-spline; B=1; C=0).
+	BSpline
+
+	// Gaussian is a Gaussian blurring filter.
+	Gaussian
+
+	// Bartlett is a Bartlett-windowed sinc filter (3 lobes).
+	Bartlett
+
+	// Lanczos filter (3 lobes).
+	Lanczos
+
+	// Hann is a Hann-windowed sinc filter (3 lobes).
+	Hann
+
+	// Hamming is a Hamming-windowed sinc filter (3 lobes).
+	Hamming
+
+	// Blackman is a Blackman-windowed sinc filter (3 lobes).
+	Blackman
+
+	// Welch is a Welch-windowed sinc filter (parabolic window, 3 lobes).
+	Welch
+
+	// Cosine is a Cosine-windowed sinc filter (3 lobes).
+	Cosine
+)
+
+type Image struct {
+	ResizeFilter ResampleFilter
+}
+
+func (t *Image) Encode(srcData []byte, width, height int, mode Mode, options *Options) (destData []byte, err error) {
 	defer func() {
 		if er := recover(); er != nil {
 			err = errors.New(fmt.Sprint(er))
 		}
 	}()
-
-	img, _, er := image.Decode(bytes.NewReader(srcData))
+	img, itype, er := image.Decode(bytes.NewReader(srcData))
 
 	if er != nil {
 		return srcData, nil
@@ -96,13 +150,11 @@ func Encode(srcData []byte, width, height int, mode Mode, options *Options) (des
 		w := img.Bounds().Dx()
 		h := img.Bounds().Dy()
 		nw, nh, resizeType := praseMode(mode, w, h, width, height)
-		if er == nil {
-			switch resizeType {
-			case SCALE:
-				img = imaging.Resize(img, nw, nh, imaging.Lanczos)
-			case THUMBNAIL:
-				img = imaging.Fill(img, nw, nh, imaging.Center, imaging.Lanczos)
-			}
+		switch resizeType {
+		case SCALE:
+			img = imaging.Resize(img, nw, nh, t.selectFilter())
+		case THUMBNAIL:
+			img = imaging.Fill(img, nw, nh, imaging.Center, t.selectFilter())
 		}
 	}
 
@@ -137,7 +189,12 @@ func Encode(srcData []byte, width, height int, mode Mode, options *Options) (des
 	}
 
 	var buf bytes.Buffer
-	switch imageType(srcData) {
+
+	if itype == "" {
+		itype = imageType(srcData)
+	}
+
+	switch itype {
 	case "jpeg":
 		err = jpeg.Encode(&buf, img, nil)
 	case "png":
@@ -159,11 +216,48 @@ func Encode(srcData []byte, width, height int, mode Mode, options *Options) (des
 	return srcData, nil
 }
 
-func Resize(srcData []byte, width, height int, mode Mode) (destData []byte, err error) {
+func (t *Image) selectFilter() imaging.ResampleFilter {
+	switch t.ResizeFilter {
+	case NearestNeighbor:
+		return imaging.NearestNeighbor
+	case Box:
+		return imaging.Box
+	case Linear:
+		return imaging.Linear
+	case Hermite:
+		return imaging.Hermite
+	case MitchellNetravali:
+		return imaging.MitchellNetravali
+	case CatmullRom:
+		return imaging.CatmullRom
+	case BSpline:
+		return imaging.BSpline
+	case Gaussian:
+		return imaging.Gaussian
+	case Bartlett:
+		return imaging.Bartlett
+	case Lanczos:
+		return imaging.Lanczos
+	case Hann:
+		return imaging.Hann
+	case Hamming:
+		return imaging.Hamming
+	case Blackman:
+		return imaging.Blackman
+	case Welch:
+		return imaging.Welch
+	case Cosine:
+		return imaging.Cosine
+	default:
+		return imaging.MitchellNetravali
+	}
+}
+
+func (t *Image) Resize(srcData []byte, width, height int, mode Mode) (destData []byte, err error) {
 	if width == 0 && height == 0 {
 		return srcData, nil
 	}
-	return Encode(srcData, width, height, mode, nil)
+	return t.Encode(srcData, width, height, mode, nil)
 }
 
 func imageType(srcData []byte) (s string) {
@@ -360,6 +454,22 @@ func convertImageFormat(img image.Image, format string) (buff bytes.Buffer, err 
 		err = imaging.Encode(&buff, img, imaging.TIFF)
 	case "webp":
 		err = webp.Encode(&buff, img, &webp.Options{Lossless: true})
+	case "ico":
+		w := img.Bounds().Dx()
+		h := img.Bounds().Dy()
+		sizes := []int{16, 32, 48, 64, 128, w, h}
+		sort.Ints(sizes)
+		i := sort.SearchInts(sizes, w)
+		j := sort.SearchInts(sizes, h)
+		k := i
+		if k > j {
+			k = j
+		}
+		tb := [][2]uint8{}
+		for i := 0; i < k; i++ {
+			tb = append(tb, [][2]uint8{{uint8(sizes[i]), uint8(sizes[i])}}...)
+		}
+		err = ico.Encode(&buff, img, &ico.Options{Thumbnails: tb})
 	default:
 		return buff, fmt.Errorf("unsupported image format: %s", format)
 	}
