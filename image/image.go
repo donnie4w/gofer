@@ -52,7 +52,8 @@ type Options struct {
 	CropAnchor []int
 	CropSide   []int
 	Blur       float64
-	Scale      []int
+	ScaleUpper []int
+	ScaleLower []int
 }
 
 type ResampleFilter int
@@ -136,12 +137,22 @@ func (t *Image) Encode(srcData []byte, width, height int, mode Mode, options *Op
 		}
 	}
 
-	if options.Scale != nil && len(options.Scale) >= 2 {
+	if options.ScaleUpper != nil && len(options.ScaleUpper) >= 2 {
 		maxPixel := 0
-		if len(options.Scale) == 3 {
-			maxPixel = options.Scale[2]
+		if len(options.ScaleUpper) == 3 {
+			maxPixel = options.ScaleUpper[2]
 		}
-		if i, err := scaleImageWithRatio(img, options.Scale[0], options.Scale[1], maxPixel); err == nil {
+		if i, err := scaleImageWithRatio(img, options.ScaleUpper[0], options.ScaleUpper[1], maxPixel, false); err == nil {
+			img = i
+		}
+	}
+
+	if options.ScaleLower != nil && len(options.ScaleLower) >= 2 {
+		maxPixel := 0
+		if len(options.ScaleLower) == 3 {
+			maxPixel = options.ScaleLower[2]
+		}
+		if i, err := scaleImageWithRatio(img, options.ScaleLower[0], options.ScaleLower[1], maxPixel, true); err == nil {
 			img = i
 		}
 	}
@@ -308,7 +319,7 @@ func praseMode(mode Mode, w, h, width, height int) (nw, nh int, resizeType Resiz
 		nw, nh = getMax(w, h, width, height, false)
 		resizeType = SCALE
 	case Mode5:
-		nw, nh = getMax(w, h, width, height, true)
+		nw, nh = getMin(w, h, width, height, true)
 		resizeType = THUMBNAIL
 	default:
 		return w, h, SCALE

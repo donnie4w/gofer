@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"math"
 
 	"github.com/disintegration/imaging"
 )
@@ -83,44 +84,49 @@ func blurGaussianImage(img image.Image, sigma float64) image.Image {
 	return imaging.Blur(img, sigma)
 }
 
-func scaleImageWithRatio(img image.Image, maxWidth, maxHeight int, maxPixel int) (image.Image, error) {
+func scaleImageWithRatio(img image.Image, newWidth, newHeight int, maxPixel int, lowerMode bool) (image.Image, error) {
 	originalBounds := img.Bounds()
 	originalWidth := originalBounds.Dx()
 	originalHeight := originalBounds.Dy()
 
-	aspectRatio := float64(originalWidth) / float64(originalHeight)
+	if newWidth == 0 {
+		newWidth = 1
+	}
+	if newHeight == 0 {
+		newHeight = 1
+	}
 
-	var newWidth, newHeight int
-	if originalWidth > maxWidth || originalHeight > maxHeight {
-		if aspectRatio > float64(maxWidth)/float64(maxHeight) {
-			newWidth = maxWidth
-			newHeight = int(float64(maxWidth) / aspectRatio)
+	aspectRatio := float64(originalWidth) / float64(originalHeight)
+	if lowerMode {
+		if aspectRatio > float64(newWidth)/float64(newHeight) {
+			newHeight = int(float64(newWidth) / aspectRatio)
 		} else {
-			newHeight = maxHeight
-			newWidth = int(float64(maxHeight) * aspectRatio)
+			newWidth = int(float64(newHeight) * aspectRatio)
 		}
 	} else {
-		if originalWidth < maxWidth {
-			newWidth = maxWidth
-			newHeight = int(float64(maxWidth) / aspectRatio)
-		}
-		if originalHeight < maxHeight {
-			newHeight = maxHeight
-			newWidth = int(float64(maxHeight) * aspectRatio)
+		if aspectRatio > float64(newWidth)/float64(newHeight) {
+			newWidth = int(float64(newHeight) * aspectRatio)
+		} else {
+			newHeight = int(float64(newWidth) / aspectRatio)
 		}
 	}
-	if maxPixel > 0 {
-		newPixels := newWidth * newHeight
-		for newPixels > maxPixel && (newWidth > 1 || newHeight > 1) {
-			if newWidth > newHeight {
-				newWidth--
-			} else {
-				newHeight--
-			}
-			newPixels = newWidth * newHeight
-		}
+
+	if maxPixel > 0 && newWidth*newHeight > maxPixel {
+		newWidth, newHeight = scaleDownToLimit(newWidth, newHeight, maxPixel)
 	}
 
 	resizedImg := imaging.Resize(img, newWidth, newHeight, imaging.Lanczos)
 	return resizedImg, nil
+}
+
+func scaleDownToLimit(a, b, limit int) (int, int) {
+	if a <= 0 || b <= 0 || limit <= 0 {
+		return 0, 0
+	}
+	if a*b < limit {
+		return a, b
+	}
+	fs := float64(limit) / float64(a*b)
+	sqrt := math.Sqrt(fs)
+	return int(float64(a) * sqrt), int(float64(b) * sqrt)
 }
