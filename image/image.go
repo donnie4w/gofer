@@ -355,7 +355,6 @@ func newSide4mode(w, h, width, height int) (int, int) {
 }
 
 func getMinAndkeepRatio(w, h, newwidth, newheight int) (int, int) {
-	fmt.Println("6===>", w, ",", h, ",", newwidth, ",", newheight)
 	if newwidth == 0 {
 		newwidth = w
 	}
@@ -383,7 +382,6 @@ func getMinAndkeepRatio(w, h, newwidth, newheight int) (int, int) {
 }
 
 func getMaxAndkeepRatio(w, h, newwidth, newheight int) (int, int) {
-	fmt.Println("5===>", w, ",", h, ",", newwidth, ",", newheight)
 	if newwidth == 0 {
 		newwidth = w
 	}
@@ -406,7 +404,6 @@ func getMaxAndkeepRatio(w, h, newwidth, newheight int) (int, int) {
 }
 
 func getSideByThubnail(w, h, width, height int) (nw, nh int) {
-	fmt.Println("4===>", w, ",", h, ",", width, ",", height)
 	nw, nh = w, h
 	if width < w {
 		nw = width
