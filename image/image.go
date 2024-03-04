@@ -298,28 +298,47 @@ func imageType(srcData []byte) (s string) {
 	return
 }
 
-func praseMode(mode Mode, w, h, width, height int) (nw, nh int, resizeType ResizeType) {
-	if width > w && height > h {
+func praseMode(mode Mode, w, h, preWidth, preHeight int) (nw, nh int, resizeType ResizeType) {
+	width, height := newSide4mode(w, h, preWidth, preHeight)
+	if nw > w && nh > h {
 		return w, h, SCALE
 	}
 	switch mode {
 	case Mode0:
-		nw, nh = getMin(w, h, width, height, false)
+		nw, nh = getMinAndkeepRatio(w, h, width, height)
 		resizeType = SCALE
 	case Mode1:
-		nw, nh = getMax(w, h, width, height, true)
+		nw, nh = getSideByThubnail(w, h, preWidth, preHeight)
 		resizeType = THUMBNAIL
 	case Mode2:
-		nw, nh = getMin(w, h, width, height, false)
+		if preWidth == 0 {
+			preWidth = int(float64(preHeight) * float64(w) / float64(h))
+			nw, nh = getMaxAndkeepRatio(w, h, preWidth, preHeight)
+		} else if preHeight == 0 {
+			preHeight = int(float64(preWidth) / float64(w) * float64(h))
+			nw, nh = getMaxAndkeepRatio(w, h, preWidth, preHeight)
+		} else {
+			nw, nh = getMaxAndkeepRatio(w, h, width, height)
+		}
 		resizeType = SCALE
 	case Mode3:
-		nw, nh = getMax(w, h, width, height, false)
+		if preWidth == 0 {
+			preWidth = preHeight
+		} else if preHeight == 0 {
+			preHeight = preWidth
+		}
+		nw, nh = getMaxAndkeepRatio(w, h, preWidth, preHeight)
 		resizeType = SCALE
 	case Mode4:
-		nw, nh = getMax(w, h, width, height, false)
+		if width == 0 {
+			width = height
+		} else if height == 0 {
+			height = width
+		}
+		nw, nh = getMaxAndkeepRatio(w, h, width, height)
 		resizeType = SCALE
 	case Mode5:
-		nw, nh = getMin(w, h, width, height, true)
+		nw, nh = getSideByThubnail(w, h, width, height)
 		resizeType = THUMBNAIL
 	default:
 		return w, h, SCALE
@@ -327,76 +346,81 @@ func praseMode(mode Mode, w, h, width, height int) (nw, nh int, resizeType Resiz
 	return
 }
 
-func getMin(w, h, width, height int, isThubnail bool) (nw, nh int) {
-	if width > w && height > h || (width == 0 && height == 0) {
-		return w, h
-	}
-	if isThubnail {
-		nw, nh = w, h
-		if width < w {
-			nw = width
-		}
-		if height < h {
-			nh = height
-		}
-		if nw == 0 {
-			nw = nh
-		}
-		if nh == 0 {
-			nh = nw
-		}
-		return
-	}
-	if float32(width)/float32(w) > float32(height)/float32(h) {
-		if height > 0 {
-			return 0, height
-		} else if width < w {
-			return width, 0
-		}
+func newSide4mode(w, h, width, height int) (int, int) {
+	if w >= h {
+		return width, height
 	} else {
-		if width > 0 {
-			return width, 0
-		} else if height < h {
-			return 0, height
-		}
+		return height, width
 	}
-	return w, h
 }
 
-func getMax(w, h, width, height int, isThubnail bool) (nw, nh int) {
-	if width > w && height > h {
+func getMinAndkeepRatio(w, h, newwidth, newheight int) (int, int) {
+	fmt.Println("6===>", w, ",", h, ",", newwidth, ",", newheight)
+	if newwidth == 0 {
+		newwidth = w
+	}
+	if newheight == 0 {
+		newheight = h
+	}
+	if newwidth >= w && newheight >= h {
 		return w, h
 	}
-	if isThubnail {
-		nw, nh = w, h
-		if width < w {
-			nw = width
+	r := float64(w) / float64(h)
+	if newwidth < w && newheight < h {
+		if newwidth > newheight {
+			newwidth = int(float64(newheight) * r)
+		} else {
+			newheight = int(float64(newwidth) / r)
 		}
-		if height < h {
-			nh = height
-		}
-		if nw == 0 {
-			nw = nh
-		}
-		if nh == 0 {
-			nh = nw
-		}
-		return
+		return newwidth, newheight
 	}
-	if float32(width)/float32(w) > float32(height)/float32(h) {
-		if width < w {
-			return width, 0
-		} else if height > 0 {
-			return 0, height
-		}
+	if newwidth >= w {
+		newwidth = int(float64(newheight) * r)
 	} else {
-		if height < h {
-			return 0, height
-		} else if width > 0 {
-			return width, 0
-		}
+		newheight = int(float64(newwidth) / r)
 	}
-	return w, h
+	return newwidth, newheight
+}
+
+func getMaxAndkeepRatio(w, h, newwidth, newheight int) (int, int) {
+	fmt.Println("5===>", w, ",", h, ",", newwidth, ",", newheight)
+	if newwidth == 0 {
+		newwidth = w
+	}
+	if newheight == 0 {
+		newheight = h
+	}
+	if newwidth >= w || newheight >= h {
+		return w, h
+	}
+	if newwidth < w && newheight < h {
+		r := float64(w) / float64(h)
+		if float64(newwidth)/float64(w) > float64(newheight)/float64(h) {
+			newheight = int(float64(newwidth) / r)
+		} else {
+			newwidth = int(float64(newheight) * r)
+		}
+		return newwidth, newheight
+	}
+	return newwidth, newheight
+}
+
+func getSideByThubnail(w, h, width, height int) (nw, nh int) {
+	fmt.Println("4===>", w, ",", h, ",", width, ",", height)
+	nw, nh = w, h
+	if width < w {
+		nw = width
+	}
+	if height < h {
+		nh = height
+	}
+	if nw == 0 {
+		nw = nh
+	}
+	if nh == 0 {
+		nh = nw
+	}
+	return
 }
 
 func QualityByBinary(srcData []byte, quality int) (_r []byte, err error) {
