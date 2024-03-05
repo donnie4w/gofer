@@ -300,7 +300,7 @@ func imageType(srcData []byte) (s string) {
 
 func praseMode(mode Mode, w, h, preWidth, preHeight int) (nw, nh int, resizeType ResizeType) {
 	width, height := newSide4mode(w, h, preWidth, preHeight)
-	if nw > w && nh > h {
+	if width > w && height > h {
 		return w, h, SCALE
 	}
 	switch mode {
@@ -470,9 +470,7 @@ func Quality(img image.Image, imagetype string, quality int) (_r []byte, err err
 
 func convertImageFormat(img image.Image, format string) (buff bytes.Buffer, err error) {
 	switch format {
-	case "jpg":
-		fallthrough
-	case "jpeg":
+	case "jpg", "jpeg":
 		err = imaging.Encode(&buff, img, imaging.JPEG)
 	case "png":
 		err = imaging.Encode(&buff, img, imaging.PNG)
@@ -480,9 +478,7 @@ func convertImageFormat(img image.Image, format string) (buff bytes.Buffer, err 
 		err = imaging.Encode(&buff, img, imaging.GIF)
 	case "bmp":
 		err = imaging.Encode(&buff, img, imaging.BMP)
-	case "tif":
-		fallthrough
-	case "tiff":
+	case "tif", "tiff":
 		err = imaging.Encode(&buff, img, imaging.TIFF)
 	case "webp":
 		err = webp.Encode(&buff, img, &webp.Options{Lossless: true})
@@ -497,9 +493,12 @@ func convertImageFormat(img image.Image, format string) (buff bytes.Buffer, err 
 		if k > j {
 			k = j
 		}
-		tb := [][2]uint8{}
-		for i := 0; i < k; i++ {
-			tb = append(tb, [][2]uint8{{uint8(sizes[i]), uint8(sizes[i])}}...)
+		var tb [][2]uint8
+		if k > 0 {
+			tb = [][2]uint8{}
+			for i := 0; i < k; i++ {
+				tb = append(tb, [][2]uint8{{uint8(sizes[i]), uint8(sizes[i])}}...)
+			}
 		}
 		err = ico.Encode(&buff, img, &ico.Options{Thumbnails: tb})
 	default:
