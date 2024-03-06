@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/donnie4w/gofer/util"
@@ -25,6 +26,11 @@ type _keyStore struct {
 
 func NewKeyStore(dir string, name string) (ks *_keyStore, err error) {
 	fname := fmt.Sprint(dir, "/", name)
+
+	if err = os.MkdirAll(filepath.Dir(fname), 0777); err != nil {
+		return
+	}
+
 	var _fileHandler *os.File
 	if _fileHandler, err = os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666); err == nil {
 		ks = &_keyStore{&sync.Mutex{}, fname, _fileHandler}
