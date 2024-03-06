@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/donnie4w/gofer/util"
@@ -25,12 +24,10 @@ type _keyStore struct {
 }
 
 func NewKeyStore(dir string, name string) (ks *_keyStore, err error) {
-	fname := fmt.Sprint(dir, "/", name)
-
-	if err = os.MkdirAll(filepath.Dir(fname), 0777); err != nil {
+	if err = os.MkdirAll(dir, 0777); err != nil {
 		return
 	}
-
+	fname := fmt.Sprint(dir, "/", name)
 	var _fileHandler *os.File
 	if _fileHandler, err = os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666); err == nil {
 		ks = &_keyStore{&sync.Mutex{}, fname, _fileHandler}
@@ -39,8 +36,8 @@ func NewKeyStore(dir string, name string) (ks *_keyStore, err error) {
 }
 
 func (this *_keyStore) Write(bs []byte) (err error) {
-	defer this.mux.Unlock()
 	this.mux.Lock()
+	defer this.mux.Unlock()
 	this._fileHandler.Seek(0, io.SeekStart)
 	this._fileHandler.Truncate(0)
 	var obs []byte
@@ -52,8 +49,8 @@ func (this *_keyStore) Write(bs []byte) (err error) {
 }
 
 func (this *_keyStore) Read() (bs []byte, err error) {
-	defer this.mux.Unlock()
 	this.mux.Lock()
+	defer this.mux.Unlock()
 	fi, err := this._fileHandler.Stat()
 	if fi.Size() > 0 {
 		if bs, err = util.ReadFile(this.fname); err == nil && bs != nil {
