@@ -16,3 +16,8 @@ require (
 	golang.org/x/image v0.15.0
 	golang.org/x/sys v0.18.0
 )
+
+require (
+	github.com/golang/protobuf v1.5.4 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
+)
