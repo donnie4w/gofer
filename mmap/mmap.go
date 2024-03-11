@@ -98,6 +98,10 @@ func (t *Mmap) Bytes() []byte {
 	return t._mmap
 }
 
+func (t *Mmap) FileSize() int64 {
+	return t.maxsize
+}
+
 func (t *Mmap) Close() (err error) {
 	if err = t.Flush(); err == nil {
 		err = t.Unmap()
