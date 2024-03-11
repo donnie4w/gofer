@@ -27,6 +27,10 @@ func NewKeyStore(dir string, name string) (ks *_keyStore, err error) {
 	if err = os.MkdirAll(dir, 0777); err != nil {
 		return
 	}
+	return LoadKeyStore(dir, name)
+}
+
+func LoadKeyStore(dir string, name string) (ks *_keyStore, err error) {
 	fname := fmt.Sprint(dir, "/", name)
 	var _fileHandler *os.File
 	if _fileHandler, err = os.OpenFile(fname, os.O_RDWR|os.O_CREATE, 0666); err == nil {
