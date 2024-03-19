@@ -96,6 +96,14 @@ func Zstd(bs []byte) (_r []byte, err error) {
 	return
 }
 
+func ZstdLevel(bs []byte, level zstd.EncoderLevel) (_r []byte, err error) {
+	var encoder *zstd.Encoder
+	if encoder, err = zstd.NewWriter(nil, zstd.WithEncoderLevel(level)); err == nil {
+		_r = encoder.EncodeAll(bs, make([]byte, 0, len(bs)))
+	}
+	return
+}
+
 func UnZstd(bs []byte) ([]byte, error) {
 	var decoder, _ = zstd.NewReader(nil, zstd.WithDecoderConcurrency(0))
 	return decoder.DecodeAll(bs, nil)
