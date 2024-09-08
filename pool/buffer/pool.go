@@ -30,8 +30,10 @@ func NewPool[T any](constructor func() *T, reset func(*T)) *pool[T] {
 }
 
 func (p *pool[T]) Get() (_r *T) {
-	_r = p.pool.Get().(*T)
-	if p.reset != nil {
+	if a := p.pool.Get(); a != nil {
+		_r = a.(*T)
+	}
+	if p.reset != nil && _r != nil {
 		p.reset(_r)
 	}
 	return
