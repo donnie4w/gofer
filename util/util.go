@@ -9,6 +9,8 @@ import (
 	crand "crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
+	"github.com/google/uuid"
+	"golang.org/x/exp/mmap"
 	"hash/crc32"
 	"hash/crc64"
 	"hash/maphash"
@@ -19,8 +21,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/exp/mmap"
 )
 
 func Concat(ss ...string) string {
@@ -122,6 +122,11 @@ func RandId() (rid int64) {
 	rid = int64(CRC32(b) & 0x7fffffff)
 	rid = rid<<32 | int64(inc()&0x00000000ffffffff)
 	return
+}
+
+func RandId32() uint32 {
+	ud := uuid.New()
+	return ud.ID()
 }
 
 func IsFileExist(path string) (_r bool) {
