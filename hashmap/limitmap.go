@@ -5,13 +5,13 @@ import (
 	"sync"
 )
 
-// limitEntry represents a cache entry with a generic key and value
+// limitEntry represents a map entry with a generic key and value
 type limitEntry[K any, V any] struct {
 	key   K
 	value V
 }
 
-// LimitMap represents a generic cache with capacity limit
+// LimitMap represents a generic map with capacity limit
 type LimitMap[K comparable, V any] struct {
 	cache    map[any]*list.Element
 	order    *list.List
@@ -38,12 +38,12 @@ func (mc *LimitMap[K, V]) Get(key K) (value V, ok bool) {
 	return
 }
 
-// Put adds or updates a key-value pair in the cache
-func (mc *LimitMap[K, V]) Put(key K, value V) {
+// Put adds or updates a key-value pair in the map
+func (mc *LimitMap[K, V]) Put(key K, value V) (prev V, b bool) {
 	mc.lock.Lock()
 	defer mc.lock.Unlock()
-
 	if elem, exists := mc.cache[any(key)]; exists {
+		prev, b = elem.Value.(*limitEntry[K, V]).value, true
 		elem.Value.(*limitEntry[K, V]).value = value
 		mc.order.MoveToFront(elem)
 		return
@@ -58,10 +58,11 @@ func (mc *LimitMap[K, V]) Put(key K, value V) {
 	newEntry := &limitEntry[K, V]{key, value}
 	elem := mc.order.PushFront(newEntry)
 	mc.cache[any(key)] = elem
+	return
 }
 
-// Remove deletes a key-value pair from the cache
-func (mc *LimitMap[K, V]) Remove(key K) {
+// Del deletes a key-value pair from the map
+func (mc *LimitMap[K, V]) Del(key K) {
 	mc.lock.Lock()
 	defer mc.lock.Unlock()
 
@@ -71,7 +72,7 @@ func (mc *LimitMap[K, V]) Remove(key K) {
 	}
 }
 
-// RemoveMulti deletes multiple key-value pairs from the cache
+// RemoveMulti deletes multiple key-value pairs from the map
 func (mc *LimitMap[K, V]) RemoveMulti(keys []K) {
 	mc.lock.Lock()
 	defer mc.lock.Unlock()
@@ -82,4 +83,11 @@ func (mc *LimitMap[K, V]) RemoveMulti(keys []K) {
 			delete(mc.cache, any(key))
 		}
 	}
+}
+
+// Len length of map
+func (mc *LimitMap[K, V]) Len() int {
+	mc.lock.RLock()
+	defer mc.lock.RUnlock()
+	return len(mc.cache)
 }
