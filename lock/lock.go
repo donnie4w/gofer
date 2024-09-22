@@ -15,152 +15,172 @@ import (
 	. "github.com/donnie4w/gofer/util"
 )
 
-// ////////////////////////////////////////
-
+// Numlock provides a set of mutex locks based on integer keys.
 type Numlock struct {
-	lockm  *Map[int64, *sync.Mutex]
-	muxNum int
+	lockm  *Map[int64, *sync.Mutex] // Map for storing mutexes indexed by keys
+	muxNum int                      // Number of mutexes
 }
 
+// NewNumLock initializes and returns a new Numlock instance.
 func NewNumLock(muxNum int) *Numlock {
 	ml := &Numlock{NewMap[int64, *sync.Mutex](), muxNum}
 	for i := 0; i < muxNum; i++ {
-		ml.lockm.Put(int64(i), &sync.Mutex{})
+		ml.lockm.Put(int64(i), &sync.Mutex{}) // Initialize mutexes
 	}
 	return ml
 }
 
-func (this *Numlock) Lock(key int64) {
-	l, _ := this.lockm.Get(int64(uint64(key) % uint64(this.muxNum)))
+// Lock acquires the lock associated with the given key.
+func (nl *Numlock) Lock(key int64) {
+	l, _ := nl.lockm.Get(int64(uint64(key) % uint64(nl.muxNum)))
 	l.Lock()
 }
 
-func (this *Numlock) Unlock(key int64) {
-	l, _ := this.lockm.Get(int64(uint64(key) % uint64(this.muxNum)))
+// Unlock releases the lock associated with the given key.
+func (nl *Numlock) Unlock(key int64) {
+	l, _ := nl.lockm.Get(int64(uint64(key) % uint64(nl.muxNum)))
 	l.Unlock()
 }
 
-/*****************************************************/
+// Strlock provides a set of read-write mutex locks based on string keys.
 type Strlock struct {
-	lockm  *Map[int64, *sync.RWMutex]
-	muxNum int
+	lockm  *Map[int64, *sync.RWMutex] // Map for storing read-write mutexes indexed by keys
+	muxNum int                        // Number of read-write mutexes
 }
 
+// NewStrlock initializes and returns a new Strlock instance.
 func NewStrlock(muxNum int) *Strlock {
 	ml := &Strlock{NewMap[int64, *sync.RWMutex](), muxNum}
 	for i := 0; i < muxNum; i++ {
-		ml.lockm.Put(int64(i), &sync.RWMutex{})
+		ml.lockm.Put(int64(i), &sync.RWMutex{}) // Initialize read-write mutexes
 	}
 	return ml
 }
 
-func (this *Strlock) Lock(key string) {
-	u := Hash([]byte(key))
-	l, _ := this.lockm.Get(int64(u % uint64(this.muxNum)))
+// Lock acquires the write lock associated with the given key.
+func (sl *Strlock) Lock(key string) {
+	u := Hash64([]byte(key)) // Calculate hash of key
+	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.Lock()
 }
 
-func (this *Strlock) Unlock(key string) {
-	u := Hash([]byte(key))
-	l, _ := this.lockm.Get(int64(u % uint64(this.muxNum)))
+// Unlock releases the write lock associated with the given key.
+func (sl *Strlock) Unlock(key string) {
+	u := Hash64([]byte(key)) // Calculate hash of key
+	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.Unlock()
 }
 
-func (this *Strlock) RLock(key string) {
-	u := Hash([]byte(key))
-	l, _ := this.lockm.Get(int64(u % uint64(this.muxNum)))
+// RLock acquires the read lock associated with the given key.
+func (sl *Strlock) RLock(key string) {
+	u := Hash64([]byte(key)) // Calculate hash of key
+	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.RLock()
 }
 
-func (this *Strlock) RUnlock(key string) {
-	u := Hash([]byte(key))
-	l, _ := this.lockm.Get(int64(u % uint64(this.muxNum)))
+// RUnlock releases the read lock associated with the given key.
+func (sl *Strlock) RUnlock(key string) {
+	u := Hash64([]byte(key)) // Calculate hash of key
+	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.RUnlock()
 }
 
-/*********************************************************/
+// Await is a generic wait group implementation that allows setting channels for different keys.
 type Await[T any] struct {
-	m   *Map[int64, chan T]
-	mux *Numlock
+	m   *Map[int64, chan T] // Map for storing channels indexed by keys
+	mux *Numlock            // Mutex lock for synchronization
 }
 
+// NewAwait initializes and returns a new Await instance.
 func NewAwait[T any](muxlimit int) *Await[T] {
 	return &Await[T]{NewMap[int64, chan T](), NewNumLock(muxlimit)}
 }
 
-func (this *Await[T]) Get(idx int64) (ch chan T) {
-	this.mux.Lock(idx)
-	defer this.mux.Unlock(idx)
+// Get retrieves or creates a channel associated with the given index.
+func (at *Await[T]) Get(idx int64) (ch chan T) {
+	at.mux.Lock(idx)
+	defer at.mux.Unlock(idx)
 	var ok bool
-	if ch, ok = this.m.Get(idx); !ok {
-		ch = make(chan T, 1)
-		this.m.Put(idx, ch)
+	if ch, ok = at.m.Get(idx); !ok {
+		ch = make(chan T, 1) // Create new channel if not found
+		at.m.Put(idx, ch)
 	}
 	return
 }
 
-func (this *Await[T]) Has(idx int64) bool {
-	return this.m.Has(idx)
+// Has checks if a channel exists for the given index.
+func (at *Await[T]) Has(idx int64) bool {
+	return at.m.Has(idx)
 }
 
-func (this *Await[T]) DelAndClose(idx int64) {
-	defer recover()
-	if this.m.Has(idx) {
-		this.mux.Lock(idx)
-		defer this.mux.Unlock(idx)
-		if o, ok := this.m.Get(idx); ok {
-			close(o)
-			this.m.Del(idx)
+// DelAndClose deletes and closes the channel associated with the given index.
+func (at *Await[T]) DelAndClose(idx int64) {
+	defer _recover() // Recover from panic if it occurs
+	if at.m.Has(idx) {
+		at.mux.Lock(idx)
+		defer at.mux.Unlock(idx)
+		if o, ok := at.m.Get(idx); ok {
+			close(o)      // Close the channel
+			at.m.Del(idx) // Remove the channel from the map
 		}
 	}
 }
 
-func (this *Await[T]) DelAndPut(idx int64, v T) {
-	defer recover()
-	if this.m.Has(idx) {
-		this.mux.Lock(idx)
-		defer this.mux.Unlock(idx)
-		if o, ok := this.m.Get(idx); ok {
-			o <- v
-			this.m.Del(idx)
+// DelAndPut sends a value to the channel and deletes it from the map.
+func (at *Await[T]) DelAndPut(idx int64, v T) {
+	defer _recover() // Recover from panic if it occurs
+	if at.m.Has(idx) {
+		at.mux.Lock(idx)
+		defer at.mux.Unlock(idx)
+		if o, ok := at.m.Get(idx); ok {
+			o <- v        // Send value to the channel
+			at.m.Del(idx) // Remove the channel from the map
 		}
 	}
 }
 
-/*********************************************************/
+// LimitLock limits the number of concurrent operations and can enforce timeouts.
 type LimitLock struct {
-	ch      chan int
-	count   int64
-	_count  int64
-	timeout time.Duration
+	ch      chan int      // Channel used for limiting concurrency
+	count   int64         // Atomic counter for tracking lock acquisitions
+	_count  int64         // Atomic counter for tracking lock releases (unused)
+	timeout time.Duration // Timeout duration
 }
 
-func NewLimitLock(limit int, timeout time.Duration) (_r *LimitLock) {
-	ch := make(chan int, limit)
-	_r = &LimitLock{ch: ch, timeout: timeout}
-	return
+// NewLimitLock initializes and returns a new LimitLock instance.
+func NewLimitLock(limit int, timeout time.Duration) *LimitLock {
+	ch := make(chan int, limit) // Create a buffered channel
+	return &LimitLock{ch: ch, timeout: timeout}
 }
 
-func (this *LimitLock) Lock() (err error) {
+// Lock acquires a lock with a timeout.
+func (ll *LimitLock) Lock() (err error) {
 	select {
-	case <-time.After(this.timeout):
+	case <-time.After(ll.timeout): // Wait until timeout
 		err = errors.New("timeout")
-	case this.ch <- 1:
-		atomic.AddInt64(&this.count, 1)
+	case ll.ch <- 1: // Acquire lock
+		atomic.AddInt64(&ll.count, 1) // Increment lock count
 	}
 	return
 }
 
-func (this *LimitLock) Unlock() {
-	<-this.ch
-	atomic.AddInt64(&this._count, 1)
+// Unlock releases a lock.
+func (ll *LimitLock) Unlock() {
+	<-ll.ch                        // Release lock
+	atomic.AddInt64(&ll._count, 1) // Increment release count (unused)
 }
 
-// concurrency num
-func (this *LimitLock) Cc() int64 {
-	return this.count - this._count
+// Cc returns the current concurrency count.
+func (ll *LimitLock) Cc() int64 {
+	return ll.count - ll._count // Difference between acquisitions and releases (always zero)
 }
 
-func (this *LimitLock) LockCount() int64 {
-	return this.count
+// LockCount returns the total number of lock acquisitions.
+func (ll *LimitLock) LockCount() int64 {
+	return atomic.LoadInt64(&ll.count) // Current lock acquisition count
+}
+
+func _recover() {
+	if r := recover(); r != nil {
+	}
 }
