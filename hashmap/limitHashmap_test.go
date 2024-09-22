@@ -1,6 +1,7 @@
 package hashmap
 
 import (
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,4 +35,17 @@ func BenchmarkSerialLimitHashMap(b *testing.B) {
 		}
 		lm.Get(k)
 	}
+}
+
+func TestLimitHashMap(t *testing.T) {
+	lm := NewLimitHashMap[int64, int64](1 << 10)
+	for i := 0; i < 1000; i++ {
+		k := time.Now().UnixNano() + int64(i)
+		lm.Put(k, time.Now().UnixNano())
+		if k%3 == 0 {
+			lm.Del(k)
+		}
+		lm.Get(k)
+	}
+	fmt.Println(lm.Len())
 }
