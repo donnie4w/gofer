@@ -20,6 +20,7 @@ type segment struct {
 	mu    sync.RWMutex
 }
 
+// LimitHashMap is a capacity-limited hash map that supports different key types.
 type LimitHashMap[K int | int64 | int8 | int16 | int32 | uint | uint64 | uint8 | uint16 | uint32 | float64 | float32 | uintptr | string, V any] struct {
 	capacity      int
 	segments      []*segment
@@ -137,8 +138,7 @@ func NewLimitHashMapWithSegment[K int | int64 | int8 | int16 | int32 | uint | ui
 
 func (c *LimitHashMap[K, V]) getSegment(key K) *segment {
 	hashedKey := c.hashFunc(key)
-	segmentIndex := int(hashedKey) % c.segmentNumber
-	return c.segments[segmentIndex]
+	return c.segments[uint(hashedKey%uint64(c.segmentNumber))]
 }
 
 func (c *LimitHashMap[K, V]) Get(key K) (r V, b bool) {
@@ -155,13 +155,14 @@ func (c *LimitHashMap[K, V]) Get(key K) (r V, b bool) {
 	return
 }
 
-func (c *LimitHashMap[K, V]) Put(key K, value V) {
+func (c *LimitHashMap[K, V]) Put(key K, value V) (prev V, b bool) {
 	segment := c.getSegment(key)
 	segment.mu.Lock()
 	defer segment.mu.Unlock()
 
 	hashedKey := c.hashFunc(key)
 	if ele, ok := segment.cache[hashedKey]; ok {
+		prev, b = ele.Value.(*entry).value.(V), true
 		ele.Value.(*entry).value = value
 		return
 	}
@@ -176,6 +177,7 @@ func (c *LimitHashMap[K, V]) Put(key K, value V) {
 
 	ele := segment.order.PushFront(&entry{hashedKey: hashedKey, key: key, value: value})
 	segment.cache[hashedKey] = ele
+	return
 }
 
 func (c *LimitHashMap[K, V]) Del(key K) {
