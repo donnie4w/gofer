@@ -1,3 +1,8 @@
+// Copyright (c) , donnie <donnie4w@gmail.com>
+// All rights reserved.
+//
+// github.com/donnie4w/gofer/hashmap
+
 package hashmap
 
 import (
@@ -15,21 +20,28 @@ func (a treeItem[K, V]) Less(b btree.Item) bool {
 	return a.Key < b.(treeItem[K, V]).Key
 }
 
+// TreeMap Define the TreeMap structure which internally uses a B-tree for storing data with an RWMutex for concurrent access control.
 type TreeMap[K cmp.Ordered, V any] struct {
 	tree  *btree.BTree
 	mutex sync.RWMutex
 }
 
+// NewTreeMap Create a new instance of TreeMap with a specified degree for the underlying B-tree.
 func NewTreeMap[K cmp.Ordered, V any](degree int) *TreeMap[K, V] {
 	return &TreeMap[K, V]{tree: btree.New(degree)}
 }
 
-func (m *TreeMap[K, V]) Put(key K, value V) {
+// Put Insert or update a key-value pair in the TreeMap.
+func (m *TreeMap[K, V]) Put(key K, value V) (prev V, b bool) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	m.tree.ReplaceOrInsert(treeItem[K, V]{Key: key, Value: value})
+	if item := m.tree.ReplaceOrInsert(treeItem[K, V]{Key: key, Value: value}); item != nil {
+		prev, b = item.(treeItem[K, V]).Value, true
+	}
+	return
 }
 
+// Get Retrieve a value from the TreeMap by its key, returning the value and a boolean indicating if the key was found.
 func (m *TreeMap[K, V]) Get(key K) (V, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -41,12 +53,14 @@ func (m *TreeMap[K, V]) Get(key K) (V, bool) {
 	return zero, false
 }
 
-func (m *TreeMap[K, V]) Delete(key K) {
+// Del Delete a key from the TreeMap.
+func (m *TreeMap[K, V]) Del(key K) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.tree.Delete(treeItem[K, V]{Key: key})
 }
 
+// Ascend Traverse all elements in ascending order based on their keys, executing the iterator function.
 func (m *TreeMap[K, V]) Ascend(iter func(K, V) bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
@@ -56,6 +70,7 @@ func (m *TreeMap[K, V]) Ascend(iter func(K, V) bool) {
 	})
 }
 
+// Descend Traverse all elements in descending order based on their keys, executing the iterator function.
 func (m *TreeMap[K, V]) Descend(iter func(K, V) bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
