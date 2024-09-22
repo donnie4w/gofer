@@ -12,7 +12,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/golang/snappy v0.0.4
 	github.com/google/btree v1.1.3
-	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.17.9
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/image v0.20.0
