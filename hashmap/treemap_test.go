@@ -1,3 +1,8 @@
+// Copyright (c) , donnie <donnie4w@gmail.com>
+// All rights reserved.
+//
+// github.com/donnie4w/gofer/hashmap
+
 package hashmap
 
 import (
@@ -17,7 +22,7 @@ func BenchmarkParalleltreeMap(b *testing.B) {
 			k := uint64(time.Now().UnixNano() + atomic.AddInt64(&i, 1))
 			tm.Put(k, time.Now().UnixNano())
 			if k%9 == 0 {
-				tm.Delete(k)
+				tm.Del(k)
 			}
 			if _, ok := tm.Get(k); !ok {
 			}
@@ -32,7 +37,7 @@ func BenchmarkSerialLimittreeMap(b *testing.B) {
 		k := uint64(time.Now().UnixNano() + int64(i))
 		tm.Put(k, time.Now().UnixNano())
 		if k%9 == 0 {
-			tm.Delete(k)
+			tm.Del(k)
 		}
 		tm.Get(k)
 	}
@@ -58,4 +63,8 @@ func Test_treeMap(t *testing.T) {
 		fmt.Println(i, ":", i2)
 		return true
 	})
+
+	tm.Put(10000, 10000)
+	fmt.Println(tm.Put(10000, 10001))
+	fmt.Println(tm.Put(10000, 10002))
 }
