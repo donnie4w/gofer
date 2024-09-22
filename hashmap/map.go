@@ -23,10 +23,13 @@ func NewMapL[K any, V any]() *MapL[K, V] {
 	return &MapL[K, V]{m: sync.Map{}}
 }
 
-func (t *MapL[K, V]) Put(key K, value V) {
-	if _, ok := t.m.Swap(key, value); !ok {
+func (t *MapL[K, V]) Put(key K, value V) (prev V, b bool) {
+	if v, ok := t.m.Swap(key, value); !ok {
 		atomic.AddInt64(&t.len, 1)
+	} else if v != nil {
+		prev, b = v.(V), true
 	}
+	return
 }
 
 func (t *MapL[K, V]) Get(key K) (_r V, b bool) {
@@ -47,18 +50,6 @@ func (t *MapL[K, V]) Has(key K) (ok bool) {
 func (t *MapL[K, V]) Del(key K) (ok bool) {
 	if _, ok = t.m.LoadAndDelete(key); ok {
 		atomic.AddInt64(&t.len, -1)
-	}
-	return
-}
-
-// Swap the value associated with the given key in the MapL.
-// If the key exists, return the old value and true; otherwise, return the zero value and false.
-func (t *MapL[K, V]) Swap(key K, value V) (_r V, loaded bool) {
-	var previous any
-	if previous, loaded = t.m.Swap(key, value); !loaded {
-		atomic.AddInt64(&t.len, 1)
-	} else if previous != nil {
-		_r = previous.(V)
 	}
 	return
 }
@@ -91,8 +82,11 @@ func NewMap[K any, V any]() *Map[K, V] {
 	return &Map[K, V]{m: sync.Map{}}
 }
 
-func (t *Map[K, V]) Put(key K, value V) {
-	t.m.Swap(key, value)
+func (t *Map[K, V]) Put(key K, value V) (prev V, b bool) {
+	if v, ok := t.m.Swap(key, value); ok && v != nil {
+		prev, b = v.(V), true
+	}
+	return
 }
 
 func (t *Map[K, V]) Get(key K) (v V, b bool) {
@@ -112,16 +106,6 @@ func (t *Map[K, V]) Has(key K) (ok bool) {
 
 func (t *Map[K, V]) Del(key K) (ok bool) {
 	_, ok = t.m.LoadAndDelete(key)
-	return
-}
-
-// Swap the value associated with the given key in the Map.
-// If the key exists, return the old value and true; otherwise, return the zero value and false.
-func (t *Map[K, V]) Swap(key K, value V) (_r V, loaded bool) {
-	var previous any
-	if previous, loaded = t.m.Swap(key, value); loaded && previous != nil {
-		_r = previous.(V)
-	}
 	return
 }
 
