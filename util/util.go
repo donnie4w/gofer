@@ -9,10 +9,10 @@ import (
 	crand "crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
-	"github.com/google/uuid"
 	"golang.org/x/exp/mmap"
 	"hash/crc32"
 	"hash/crc64"
+	"hash/fnv"
 	"hash/maphash"
 	"math/big"
 	"math/rand"
@@ -70,8 +70,17 @@ func CRC64(bs []byte) uint64 {
 
 var seed = maphash.MakeSeed()
 
-func Hash(key []byte) uint64 {
+func Hash64(key []byte) uint64 {
 	return maphash.Bytes(seed, key)
+}
+
+func Hash32(key []byte) uint32 {
+	h := fnv.New32a()
+	if _, err := h.Write(key); err == nil {
+		return h.Sum32()
+	} else {
+		return CRC32(key)
+	}
 }
 
 func Rand(i int) (_r int) {
@@ -105,28 +114,39 @@ func StrToTimeFormat(s string) (t time.Time, err error) {
 }
 
 /***********************************************************/
-var __inc uint64
 var __pid = Int64ToBytes(int64(os.Getpid()))
 var _rid, _ = RandStrict(1<<63 - 1)
 var rids = Int64ToBytes(_rid)
 
+var __randinc uint64
+
 func inc() uint64 {
-	return atomic.AddUint64(&__inc, 1)
+	return atomic.AddUint64(&__randinc, 1)
 }
 
 func RandId() (rid int64) {
-	b := make([]byte, 24)
+	b := make([]byte, 32)
+	i := int64(inc())
 	copy(b[0:8], __pid)
 	copy(b[8:], Int64ToBytes(time.Now().UnixNano()))
-	copy(b[16:], rids)
-	rid = int64(CRC32(b) & 0x7fffffff)
-	rid = rid<<32 | int64(inc()&0x00000000ffffffff)
-	return
+	copy(b[16:24], rids)
+	copy(b[24:], Int64ToBytes(i))
+	rid = int64(Hash32(b) & 0x7fffffff)
+	return rid<<32 | int64(i&0x00000000ffffffff)
+	//ud := uuid.New()
+	//return int64(binary.BigEndian.Uint64(ud[0:8]))
 }
 
 func RandId32() uint32 {
-	ud := uuid.New()
-	return ud.ID()
+	b := make([]byte, 32)
+	i := int64(inc())
+	copy(b[0:8], __pid)
+	copy(b[8:], Int64ToBytes(time.Now().UnixNano()))
+	copy(b[16:24], rids)
+	copy(b[24:], Int64ToBytes(i))
+	return Hash32(b)
+	//ud := uuid.New()
+	//return ud.ID()
 }
 
 func IsFileExist(path string) (_r bool) {
