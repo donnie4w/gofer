@@ -59,6 +59,8 @@ func _newdest(nBits uint32, k uint8) (dest []byte) {
 }
 
 func (this *Bloomfilter) Add(key []byte) {
+	this.mux.Lock()
+	defer this.mux.Unlock()
 	if key != nil {
 		this._add(key)
 		c := atomic.AddInt64(&this.count, 1)
@@ -83,6 +85,8 @@ func (this *Bloomfilter) _add(key []byte) {
 }
 
 func (this *Bloomfilter) Contains(key []byte) bool {
+	this.mux.RLock()
+	defer this.mux.RUnlock()
 	c := this.count
 	if c%int64(this.limit) >= int64(this.limit)/2 && c%int64(this.limit) < int64(this.limit)-1 {
 		return contains(this.dest2, key)
