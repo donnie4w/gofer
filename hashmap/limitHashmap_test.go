@@ -24,6 +24,22 @@ func BenchmarkParallelLimitHashMap(b *testing.B) {
 	})
 }
 
+func BenchmarkParallelLimitHashMapGet(b *testing.B) {
+	lm := NewLimitHashMap[int, int64](1 << 17)
+	for i := range 500000 {
+		lm.Put(i, time.Now().UnixNano())
+	}
+	b.ResetTimer()
+	var i int = 0
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			i++
+			if _, ok := lm.Get(i); !ok {
+			}
+		}
+	})
+}
+
 func BenchmarkSerialLimitHashMap(b *testing.B) {
 	lm := NewLimitHashMap[uint64, int64](1 << 17)
 	b.ResetTimer()
