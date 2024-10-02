@@ -52,8 +52,8 @@ type Options struct {
 	CropAnchor []int
 	CropSide   []int
 	Blur       float64
-	ScaleUpper []int
-	ScaleLower []int
+	ScaleUpper []int //Scale to maximum mode
+	ScaleLower []int //Scale to minimal mode
 }
 
 type ResampleFilter int
