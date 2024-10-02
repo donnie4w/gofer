@@ -28,7 +28,11 @@ func Post3(bs []byte, close bool, httpurl string, header map[string]string, c *h
 	}
 	client := http.Client{Transport: transport}
 	var req *http.Request
-	if req, err = http.NewRequest(http.MethodPost, httpurl, bytes.NewReader(bs)); err == nil {
+	var reader io.Reader
+	if len(bs) > 0 {
+		reader = bytes.NewReader(bs)
+	}
+	if req, err = http.NewRequest(http.MethodPost, httpurl, reader); err == nil {
 		if close {
 			req.Close = true
 		}
