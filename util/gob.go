@@ -1,6 +1,7 @@
 // Copyright (c) , donnie <donnie4w@gmail.com>
 // All rights reserved.
 // github.com/donnie4w/gofer/util
+
 package util
 
 import (
@@ -43,12 +44,12 @@ func Decode[T any](buf []byte) (_r *T, err error) {
 	return
 }
 
-func Int64ToBytes(n int64) (bs []byte) {
-	bs = make([]byte, 8)
+func Int64ToBytes(n int64) []byte {
+	var bs [8]byte
 	for i := 0; i < 8; i++ {
 		bs[i] = byte(n >> (8 * (7 - i)))
 	}
-	return
+	return bs[:]
 }
 
 func BytesToInt64(bs []byte) (_r int64) {
@@ -57,29 +58,29 @@ func BytesToInt64(bs []byte) (_r int64) {
 			_r = _r | int64(bs[i])<<(8*(7-i))
 		}
 	} else {
-		bs8 := make([]byte, 8)
+		var bs8 [8]byte
 		for i, b := range bs {
 			bs8[i+8-len(bs)] = b
 		}
-		_r = BytesToInt64(bs8)
+		_r = BytesToInt64(bs8[:])
 	}
 	return
 }
 
-func Int32ToBytes(n int32) (bs []byte) {
-	bs = make([]byte, 4)
+func Int32ToBytes(n int32) []byte {
+	var bs [4]byte
 	for i := 0; i < 4; i++ {
 		bs[i] = byte(n >> (8 * (3 - i)))
 	}
-	return
+	return bs[:]
 }
 
-func Int16ToBytes(n int16) (bs []byte) {
-	bs = make([]byte, 2)
+func Int16ToBytes(n int16) []byte {
+	var bs [2]byte
 	for i := 0; i < 2; i++ {
 		bs[i] = byte(n >> (8 * (1 - i)))
 	}
-	return
+	return bs[:]
 }
 
 func BytesToInt32(bs []byte) (_r int32) {
@@ -103,11 +104,11 @@ func BytesToInt16(bs []byte) (_r int16) {
 			_r = _r | int16(bs[i])<<(8*(1-i))
 		}
 	} else {
-		bs2 := make([]byte, 2)
+		var bs2 [2]byte
 		for i, b := range bs {
 			bs2[i+2-len(bs)] = b
 		}
-		_r = BytesToInt16(bs2)
+		_r = BytesToInt16(bs2[:])
 	}
 	return
 }
@@ -206,39 +207,5 @@ func SnappyEncode(bs []byte) (_r []byte) {
 
 func SnappyDecode(bs []byte) (_r []byte) {
 	_r, _ = snappy.Decode(nil, bs)
-	return
-}
-
-var b58Alphabet = []byte("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
-
-// https://en.bitcoin.it/wiki/Base58Check_encoding#Version_bytes
-// method based on base58
-func Base58EncodeForInt64(v uint64) (_r []byte) {
-	for v > 0 {
-		mod := v % 58
-		v /= 58
-		_r = append(_r, b58Alphabet[mod])
-	}
-	return reverseBytes(_r)
-}
-
-func reverseBytes(bytes []byte) []byte {
-	for i := 0; i < len(bytes)/2; i++ {
-		bytes[i], bytes[len(bytes)-1-i] = bytes[len(bytes)-1-i], bytes[i]
-	}
-	return bytes
-}
-
-func Base58DecodeForInt64(bs []byte) (_r uint64, ok bool) {
-	defer recover()
-	for _, b := range bs {
-		if idx := bytes.IndexByte(b58Alphabet, b); idx >= 0 {
-			_r *= 58
-			_r += uint64(idx)
-		} else {
-			return 0, false
-		}
-	}
-	ok = true
 	return
 }
