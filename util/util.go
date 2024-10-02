@@ -6,20 +6,20 @@ package util
 
 import (
 	"crypto/md5"
-	crand "crypto/rand"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
+	"github.com/donnie4w/gofer/uuid"
 	"golang.org/x/exp/mmap"
 	"hash/crc32"
 	"hash/crc64"
 	"hash/fnv"
 	"hash/maphash"
 	"math/big"
-	"math/rand"
+	mathrand "math/rand"
 	"os"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
@@ -83,20 +83,16 @@ func Hash32(key []byte) uint32 {
 	}
 }
 
-func Rand(i int) (_r int) {
-	if i > 0 {
-		_r = rand.New(rand.NewSource(time.Now().UnixNano())).Intn(i)
-	}
-	return
+func RandUint(i uint) uint {
+	return uint(mathrand.New(mathrand.NewSource(uuid.NewUUID().Int64())).Intn(int(i)))
 }
 
-func RandStrict(i int64) (_r int64, _err error) {
-	if r, err := crand.Int(crand.Reader, big.NewInt(i)); err == nil {
-		_r = r.Int64()
+func RandInt64Strict(i int64) (int64, error) {
+	if r, err := rand.Int(rand.Reader, big.NewInt(i)); err == nil {
+		return r.Int64(), err
 	} else {
-		_err = err
+		return 0, err
 	}
-	return
 }
 
 func MatchString(pattern string, s string) bool {
@@ -113,40 +109,12 @@ func StrToTimeFormat(s string) (t time.Time, err error) {
 	return
 }
 
-/***********************************************************/
-var __pid = Int64ToBytes(int64(os.Getpid()))
-var _rid, _ = RandStrict(1<<63 - 1)
-var rids = Int64ToBytes(_rid)
-
-var __randinc uint64
-
-func inc() uint64 {
-	return atomic.AddUint64(&__randinc, 1)
+func UUID64() (rid int64) {
+	return uuid.NewUUID().Int64()
 }
 
-func RandId() (rid int64) {
-	b := make([]byte, 32)
-	i := int64(inc())
-	copy(b[0:8], __pid)
-	copy(b[8:], Int64ToBytes(time.Now().UnixNano()))
-	copy(b[16:24], rids)
-	copy(b[24:], Int64ToBytes(i))
-	rid = int64(Hash32(b) & 0x7fffffff)
-	return rid<<32 | int64(i&0x00000000ffffffff)
-	//ud := uuid.New()
-	//return int64(binary.BigEndian.Uint64(ud[0:8]))
-}
-
-func RandId32() uint32 {
-	b := make([]byte, 32)
-	i := int64(inc())
-	copy(b[0:8], __pid)
-	copy(b[8:], Int64ToBytes(time.Now().UnixNano()))
-	copy(b[16:24], rids)
-	copy(b[24:], Int64ToBytes(i))
-	return Hash32(b)
-	//ud := uuid.New()
-	//return ud.ID()
+func UUID32() uint32 {
+	return uint32(uuid.NewUUID().Int32())
 }
 
 func IsFileExist(path string) (_r bool) {
