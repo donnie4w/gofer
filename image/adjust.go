@@ -95,7 +95,6 @@ func scaleImageWithRatio(img image.Image, newWidth, newHeight int, maxPixel int,
 	if newHeight == 0 {
 		newHeight = 1
 	}
-
 	aspectRatio := float64(originalWidth) / float64(originalHeight)
 	if lowerMode {
 		if aspectRatio > float64(newWidth)/float64(newHeight) {
