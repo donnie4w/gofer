@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/donnie4w/gofer/hashmap"
 	"strconv"
 	"testing"
 	"time"
@@ -151,55 +150,20 @@ func Test_Gzip(t *testing.T) {
 	fmt.Println(string(buf.Bytes()))
 }
 
-func BenchmarkParallel_RandID(b *testing.B) {
-	k := 0
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			k++
-			if id := RandId(); id < 0 {
-				panic("error:" + fmt.Sprint(id))
-			}
-		}
-	})
-	fmt.Println("len k >>", k)
-}
-
 func TestCrc(t *testing.T) {
 	fmt.Printf("CRC-8: %X\n", CRC8([]byte("12")))
 }
 
-func BenchmarkBase58(b *testing.B) {
-	bs := Base58EncodeForInt64(1 << 60)
-	fmt.Println(string(bs))
-	r, _ := Base58DecodeForInt64(bs)
-	fmt.Println(r == 1<<60)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		bs := Base58EncodeForInt64(1234567891011)
-		Base58DecodeForInt64(bs)
+func TestRandUint(t *testing.T) {
+	for range 10 {
+		t.Log(RandUint(10))
 	}
 }
 
-func Benchmark_RandID(b *testing.B) {
-	m := hashmap.NewMap[any, byte]()
+func BenchmarkRandUint(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			//for range 10 {
-			//	RandId()
-			//}
-			randid := RandId()
-			if m.Has(randid) {
-				fmt.Println(randid)
-				break
-			} else {
-				m.Put(randid, 1)
-			}
+			RandUint(10)
 		}
 	})
-}
-
-func TestRandID(t *testing.T) {
-	for range 100 {
-		fmt.Println(RandId())
-	}
 }
