@@ -11,19 +11,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	. "github.com/donnie4w/gofer/hashmap"
-	. "github.com/donnie4w/gofer/util"
+	"github.com/donnie4w/gofer/hashmap"
+	"github.com/donnie4w/gofer/util"
 )
 
 // Numlock provides a set of mutex locks based on integer keys.
 type Numlock struct {
-	lockm  *Map[int64, *sync.Mutex] // Map for storing mutexes indexed by keys
-	muxNum int                      // Number of mutexes
+	lockm  *hashmap.Map[int64, *sync.Mutex] // Map for storing mutexes indexed by keys
+	muxNum int                              // Number of mutexes
 }
 
 // NewNumLock initializes and returns a new Numlock instance.
 func NewNumLock(muxNum int) *Numlock {
-	ml := &Numlock{NewMap[int64, *sync.Mutex](), muxNum}
+	ml := &Numlock{hashmap.NewMap[int64, *sync.Mutex](), muxNum}
 	for i := 0; i < muxNum; i++ {
 		ml.lockm.Put(int64(i), &sync.Mutex{}) // Initialize mutexes
 	}
@@ -44,13 +44,13 @@ func (nl *Numlock) Unlock(key int64) {
 
 // Strlock provides a set of read-write mutex locks based on string keys.
 type Strlock struct {
-	lockm  *Map[int64, *sync.RWMutex] // Map for storing read-write mutexes indexed by keys
-	muxNum int                        // Number of read-write mutexes
+	lockm  *hashmap.Map[int64, *sync.RWMutex] // Map for storing read-write mutexes indexed by keys
+	muxNum int                                // Number of read-write mutexes
 }
 
 // NewStrlock initializes and returns a new Strlock instance.
 func NewStrlock(muxNum int) *Strlock {
-	ml := &Strlock{NewMap[int64, *sync.RWMutex](), muxNum}
+	ml := &Strlock{hashmap.NewMap[int64, *sync.RWMutex](), muxNum}
 	for i := 0; i < muxNum; i++ {
 		ml.lockm.Put(int64(i), &sync.RWMutex{}) // Initialize read-write mutexes
 	}
@@ -59,41 +59,41 @@ func NewStrlock(muxNum int) *Strlock {
 
 // Lock acquires the write lock associated with the given key.
 func (sl *Strlock) Lock(key string) {
-	u := Hash64([]byte(key)) // Calculate hash of key
+	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.Lock()
 }
 
 // Unlock releases the write lock associated with the given key.
 func (sl *Strlock) Unlock(key string) {
-	u := Hash64([]byte(key)) // Calculate hash of key
+	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.Unlock()
 }
 
 // RLock acquires the read lock associated with the given key.
 func (sl *Strlock) RLock(key string) {
-	u := Hash64([]byte(key)) // Calculate hash of key
+	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.RLock()
 }
 
 // RUnlock releases the read lock associated with the given key.
 func (sl *Strlock) RUnlock(key string) {
-	u := Hash64([]byte(key)) // Calculate hash of key
+	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.RUnlock()
 }
 
 // Await is a generic wait group implementation that allows setting channels for different keys.
 type Await[T any] struct {
-	m   *Map[int64, chan T] // Map for storing channels indexed by keys
-	mux *Numlock            // Mutex lock for synchronization
+	m   *hashmap.Map[int64, chan T] // Map for storing channels indexed by keys
+	mux *Numlock                    // Mutex lock for synchronization
 }
 
 // NewAwait initializes and returns a new Await instance.
 func NewAwait[T any](muxlimit int) *Await[T] {
-	return &Await[T]{NewMap[int64, chan T](), NewNumLock(muxlimit)}
+	return &Await[T]{hashmap.NewMap[int64, chan T](), NewNumLock(muxlimit)}
 }
 
 // Get retrieves or creates a channel associated with the given index.
@@ -115,7 +115,7 @@ func (at *Await[T]) Has(idx int64) bool {
 
 // DelAndClose deletes and closes the channel associated with the given index.
 func (at *Await[T]) DelAndClose(idx int64) {
-	defer _recover() // Recover from panic if it occurs
+	defer recoverpanic() // Recover from panic if it occurs
 	if at.m.Has(idx) {
 		at.mux.Lock(idx)
 		defer at.mux.Unlock(idx)
@@ -128,7 +128,7 @@ func (at *Await[T]) DelAndClose(idx int64) {
 
 // DelAndPut sends a value to the channel and deletes it from the map.
 func (at *Await[T]) DelAndPut(idx int64, v T) {
-	defer _recover() // Recover from panic if it occurs
+	defer recoverpanic() // Recover from panic if it occurs
 	if at.m.Has(idx) {
 		at.mux.Lock(idx)
 		defer at.mux.Unlock(idx)
@@ -180,7 +180,7 @@ func (ll *LimitLock) LockCount() int64 {
 	return atomic.LoadInt64(&ll.count) // Current lock acquisition count
 }
 
-func _recover() {
+func recoverpanic() {
 	if r := recover(); r != nil {
 	}
 }
