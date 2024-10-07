@@ -15,5 +15,6 @@ require (
 	github.com/klauspost/compress v1.17.10
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/image v0.20.0
-	golang.org/x/sys v0.25.0
+	golang.org/x/net v0.30.0
+	golang.org/x/sys v0.26.0
 )
