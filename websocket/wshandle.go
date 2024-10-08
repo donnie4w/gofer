@@ -41,7 +41,10 @@ type Handler struct {
 
 func NewHandler(cfg *Config) (wh *Handler, err error) {
 	var conn *wss.Conn
-	config := &wss.Config{Dialer: &net.Dialer{Timeout: cfg.TimeOut}, Version: wss.ProtocolVersionHybi13}
+	config := &wss.Config{Version: wss.ProtocolVersionHybi13}
+	if cfg.TimeOut > 0 {
+		config.Dialer = &net.Dialer{Timeout: cfg.TimeOut}
+	}
 	if strings.HasPrefix(cfg.Url, "wss:") {
 		if cfg.CertFiles != nil {
 			if rootcas, e := loadCACertificatesFromFiles(cfg.CertFiles); e == nil {
@@ -64,6 +67,8 @@ func NewHandler(cfg *Config) (wh *Handler, err error) {
 		} else {
 			config.TlsConfig = &tls.Config{InsecureSkipVerify: true}
 		}
+	} else if !strings.HasPrefix(cfg.Url, "ws:") {
+		return nil, errors.New("network transfer protocol error:" + cfg.Url)
 	}
 	if config.Location, err = url.ParseRequestURI(cfg.Url); err == nil {
 		if config.Origin, err = url.ParseRequestURI(cfg.Origin); err == nil {
