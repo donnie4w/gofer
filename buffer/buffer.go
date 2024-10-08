@@ -21,6 +21,11 @@ func NewBuffer() *Buffer {
 	return (*Buffer)(&b)
 }
 
+func NewBufferWithCapacity(capacity int) *Buffer {
+	b := make([]byte, 0, capacity)
+	return (*Buffer)(&b)
+}
+
 func NewBufferByPool() *Buffer {
 	return BufPool.Get()
 }
