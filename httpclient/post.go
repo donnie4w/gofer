@@ -1,5 +1,7 @@
-// Copyright (c) , donnie <donnie4w@gmail.com>
+// Copyright (c) 2023, donnie <donnie4w@gmail.com>
 // All rights reserved.
+// Use of t source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 //
 // github.com/donnie4w/gofer/httpclient
 
@@ -13,17 +15,17 @@ import (
 	"strings"
 )
 
-func Post(bs []byte, httpurl string) (_r []byte, err error) {
-	return Post2(bs, false, httpurl)
+func Post(bs []byte, url string) (_r []byte, err error) {
+	return Post2(bs, false, url)
 }
 
-func Post2(bs []byte, close bool, httpurl string) (_r []byte, err error) {
-	return Post3(bs, close, httpurl, nil, nil)
+func Post2(bs []byte, close bool, url string) (_r []byte, err error) {
+	return Post3(bs, close, url, nil, nil)
 }
 
-func Post3(bs []byte, close bool, httpurl string, header map[string]string, c *http.Cookie) (_r []byte, err error) {
+func Post3(bs []byte, close bool, url string, header map[string]string, c *http.Cookie) (_r []byte, err error) {
 	transport := &http.Transport{DisableKeepAlives: true}
-	if strings.HasPrefix(httpurl, "https:") {
+	if strings.HasPrefix(url, "https:") {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	client := http.Client{Transport: transport}
@@ -32,7 +34,7 @@ func Post3(bs []byte, close bool, httpurl string, header map[string]string, c *h
 	if len(bs) > 0 {
 		reader = bytes.NewReader(bs)
 	}
-	if req, err = http.NewRequest(http.MethodPost, httpurl, reader); err == nil {
+	if req, err = http.NewRequest(http.MethodPost, url, reader); err == nil {
 		if close {
 			req.Close = true
 		}
