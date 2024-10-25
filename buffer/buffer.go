@@ -1,11 +1,14 @@
-// Copyright (c) , donnie <donnie4w@gmail.com>
+// Copyright (c) 2023, donnie <donnie4w@gmail.com>
 // All rights reserved.
+// Use of t source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 //
 // github.com/donnie4w/gofer/buffer
 
 package buffer
 
 import (
+	"fmt"
 	"io"
 
 	gobuffer "github.com/donnie4w/gofer/pool/buffer"
@@ -41,31 +44,52 @@ func (b *Buffer) Reset() {
 }
 
 func (b *Buffer) Write(p []byte) (int, error) {
-	*b = append(*b, p...)
-	return len(p), nil
+	if b != nil {
+		*b = append(*b, p...)
+		return len(p), nil
+	} else {
+		return 0, fmt.Errorf("Write: buffer is nil")
+	}
 }
 
 func (b *Buffer) WriteString(s string) (int, error) {
-	*b = append(*b, s...)
-	return len(s), nil
+	if b != nil {
+		*b = append(*b, s...)
+		return len(s), nil
+	} else {
+		return 0, fmt.Errorf("WriteString: buffer is nil")
+	}
 }
 
 func (b *Buffer) WriteInt32(i int) (int, error) {
-	*b = append(*b, int32ToBytes(int32(i))...)
-	return 8, nil
+	if b != nil {
+		*b = append(*b, int32ToBytes(int32(i))...)
+		return 8, nil
+	} else {
+		return 0, fmt.Errorf("WriteInt32: buffer is nil")
+	}
 }
 
 func (b *Buffer) WriteByte(c byte) error {
-	*b = append(*b, c)
-	return nil
+	if b != nil {
+		*b = append(*b, c)
+		return nil
+	} else {
+		return fmt.Errorf("WriteByte: buffer is nil")
+	}
 }
 
 func (b *Buffer) Bytes() []byte {
-	return []byte(*b)
+	if b != nil {
+		return []byte(*b)
+	}
+	return nil
 }
 
 func (b *Buffer) Free() {
-	BufPool.Put(&b)
+	if b != nil {
+		BufPool.Put(&b)
+	}
 }
 
 func (b *Buffer) Len() int {
