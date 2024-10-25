@@ -1,5 +1,8 @@
-// Copyright (c) , donnie <donnie4w@gmail.com>
+// Copyright (c) 2023, donnie <donnie4w@gmail.com>
 // All rights reserved.
+// Use of t source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+//
 // github.com/donnie4w/gofer/pool/gopool
 
 package gopool
@@ -18,29 +21,29 @@ type funcn struct {
 	once sync.Once
 }
 
-func (this *funcn) add(f func()) {
-	this.task <- f
-	this.once.Do(func() {
-		go this.run()
+func (fc *funcn) add(f func()) {
+	fc.task <- f
+	fc.once.Do(func() {
+		go fc.run()
 	})
 }
 
-func (this *funcn) run() {
+func (fc *funcn) run() {
 	defer func() {
 		if err := recover(); err != nil {
-			if this.pool.put(this) {
-				go this.run()
+			if fc.pool.put(fc) {
+				go fc.run()
 			}
 		}
 	}()
 	for {
 		select {
-		case f := <-this.task:
+		case f := <-fc.task:
 			f()
-		case <-this.pool.ctx.Done():
+		case <-fc.pool.ctx.Done():
 			goto END
 		}
-		if !this.pool.put(this) {
+		if !fc.pool.put(fc) {
 			break
 		}
 	}
@@ -79,82 +82,82 @@ func NewPoolWithFuncLimit(minlimit int64, maxlimit int64, FuncLimit int) *GoPool
 	return p
 }
 
-func (this *GoPool) Go(f func()) {
-	if !this.close {
-		this.funcnPool <- f
-		atomic.AddInt64(&this.tnum, 1)
-		if this.mux.TryLock() {
-			go this.funcn()
+func (g *GoPool) Go(f func()) {
+	if !g.close {
+		g.funcnPool <- f
+		atomic.AddInt64(&g.tnum, 1)
+		if g.mux.TryLock() {
+			go g.funcn()
 		}
 	} else {
 		go f()
 	}
 }
 
-// the number of functions not executed
-func (this *GoPool) NumUnExecu() int {
-	return int(this.tnum)
+// NumUnExecu the number of functions not executed
+func (g *GoPool) NumUnExecu() int {
+	return int(g.tnum)
 }
 
-// when Close ,the pool will enable goroutine, and the func in the pool will be started with goroutine
-func (this *GoPool) Close() {
-	defer recover()
-	if atomic.CompareAndSwapInt32(&this._closeflag, 0, 1) {
-		this.close = true
-		this.cancel()
+// Close when Close ,the pool will enable goroutine, and the func in the pool will be started with goroutine
+func (g *GoPool) Close() {
+	defer func() { recover() }()
+	if atomic.CompareAndSwapInt32(&g._closeflag, 0, 1) {
+		g.close = true
+		g.cancel()
 		go func() {
 			<-time.After(10 * time.Second)
-			close(this.funcnPool)
+			close(g.funcnPool)
 		}()
-		close(this.pool)
+		close(g.pool)
 	}
 }
 
-func (this *GoPool) TurnOff(off bool) {
-	if atomic.CompareAndSwapInt32(&this._closeflag, 0, 0) && off {
-		this.close = true
-	} else if atomic.CompareAndSwapInt32(&this._closeflag, 0, 0) && !off {
-		this.close = false
+func (g *GoPool) TurnOff(off bool) {
+	if atomic.CompareAndSwapInt32(&g._closeflag, 0, 0) && off {
+		g.close = true
+	} else if atomic.CompareAndSwapInt32(&g._closeflag, 0, 0) && !off {
+		g.close = false
 	}
 }
 
-func (this *GoPool) funcn() {
-	defer recover()
-	defer this.mux.Unlock()
-	this._funcn()
+func (g *GoPool) funcn() {
+	defer func() { recover() }()
+	defer g.mux.Unlock()
+	g._funcn()
 }
 
-func (this *GoPool) _funcn() {
-	for f := range this.funcnPool {
-		if this.close {
+func (g *GoPool) _funcn() {
+	for f := range g.funcnPool {
+		if g.close {
 			go f()
 		} else {
 			var t *funcn
-			if count := atomic.AddInt64(&this.count, 1); count > this.minlimit && count <= this.maxlimit {
-				t = &funcn{task: make(chan func(), 1), id: atomic.AddInt64(&this.id, 1), pool: this}
-			} else if this.id > this.minlimit {
-				t = <-this.pool
-			} else if id := atomic.AddInt64(&this.id, 1); id <= this.minlimit {
-				t = &funcn{task: make(chan func(), 1), id: id, pool: this}
+			if count := atomic.AddInt64(&g.count, 1); count > g.minlimit && count <= g.maxlimit {
+				t = &funcn{task: make(chan func(), 1), id: atomic.AddInt64(&g.id, 1), pool: g}
+			} else if g.id > g.minlimit {
+				t = <-g.pool
+			} else if id := atomic.AddInt64(&g.id, 1); id <= g.minlimit {
+				t = &funcn{task: make(chan func(), 1), id: id, pool: g}
 			} else {
-				t = <-this.pool
+				t = <-g.pool
 			}
 			t.add(f)
 		}
-		if atomic.AddInt64(&this.tnum, -1) <= 0 {
+		if atomic.AddInt64(&g.tnum, -1) <= 0 {
 			break
 		}
 	}
-	if this.tnum > 0 {
-		this._funcn()
+	if g.tnum > 0 {
+		g._funcn()
 	}
 	return
 }
 
-func (this *GoPool) put(f *funcn) (ok bool) {
-	atomic.AddInt64(&this.count, -1)
-	if f.id <= this.minlimit && atomic.CompareAndSwapInt32(&this._closeflag, 0, 0) {
-		this.pool <- f
+func (g *GoPool) put(f *funcn) (ok bool) {
+	atomic.AddInt64(&g.count, -1)
+	if f.id <= g.minlimit && atomic.CompareAndSwapInt32(&g._closeflag, 0, 0) {
+		g.pool <- f
 		ok = true
 	}
 	return

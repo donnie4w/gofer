@@ -1,5 +1,8 @@
-// Copyright (c) , donnie <donnie4w@gmail.com>
+// Copyright (c) 2023, donnie <donnie4w@gmail.com>
 // All rights reserved.
+// Use of t source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+//
 // github.com/donnie4w/gofer/pool/buffer
 
 package buffer
@@ -39,11 +42,11 @@ func (p *pool[T]) Get() (_r *T) {
 	return
 }
 
-func (p *pool[T]) Put(t **T) (ok bool) {
+func (p *pool[T]) Put(t **T) bool {
 	if *t != nil {
 		p.pool.Put(*t)
 		*t = nil
-		ok = true
+		return true
 	}
-	return
+	return false
 }
