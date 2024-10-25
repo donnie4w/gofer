@@ -1,7 +1,9 @@
-// Copyright (c) , donnie <donnie4w@gmail.com>
+// Copyright (c) 2023, donnie <donnie4w@gmail.com>
 // All rights reserved.
+// Use of t source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 //
-// github.com/donnie4w/tim/keystore
+// github.com/donnie4w/gofer/keystore
 
 package keystore
 
