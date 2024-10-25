@@ -1,3 +1,10 @@
+// Copyright (c) 2023, donnie <donnie4w@gmail.com>
+// All rights reserved.
+// Use of t source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+//
+// github.com/donnie4w/gofer/mmap
+
 package mmap
 
 import (
@@ -24,12 +31,12 @@ func NewMMAP(f *os.File, startOffset int64) (m *Mmap, err error) {
 	if startOffset >= fif.Size() {
 		return nil, errors.New("offset Exceeds the file limit")
 	}
-	m = &Mmap{File: f, _mmap: _mmap, maxsize: fif.Size(), mux: &sync.Mutex{}, offset: startOffset}
+	m = &Mmap{file: f, _mmap: _mmap, maxsize: fif.Size(), mux: &sync.Mutex{}, offset: startOffset}
 	return
 }
 
 type Mmap struct {
-	File    *os.File
+	file    *os.File
 	_mmap   gommap.MMap
 	offset  int64
 	maxsize int64
@@ -52,12 +59,12 @@ func (t *Mmap) Append(bs []byte) (n int64, err error) {
 
 func (t *Mmap) AppendSync(bs []byte) (n int64, err error) {
 	if n, err = t.Append(bs); err == nil {
-		err = mmapSyncToDisk(t.File, t._mmap, n, len(bs))
+		err = mmapSyncToDisk(t.file, t._mmap, n, len(bs))
 	}
 	return
 }
 
-func (t *Mmap) Write(bs []byte, offset int) (err error) {
+func (t *Mmap) WriteAt(bs []byte, offset int) (err error) {
 	t.mux.Lock()
 	if offset+len(bs) > int(t.maxsize) {
 		err = errors.New("exceeding file size limit")
@@ -72,9 +79,9 @@ func (t *Mmap) Write(bs []byte, offset int) (err error) {
 	return
 }
 
-func (t *Mmap) WriteSync(bs []byte, offset int) (err error) {
-	if err = t.Write(bs, offset); err == nil {
-		err = mmapSyncToDisk(t.File, t._mmap, int64(offset), len(bs))
+func (t *Mmap) WriteAtSync(bs []byte, offset int) (err error) {
+	if err = t.WriteAt(bs, offset); err == nil {
+		err = mmapSyncToDisk(t.file, t._mmap, int64(offset), len(bs))
 	}
 	return
 }
@@ -85,7 +92,7 @@ func (t *Mmap) Unmap() error {
 
 func (t *Mmap) UnmapAndCloseFile() (err error) {
 	if err = t._mmap.Unmap(); err == nil {
-		err = t.File.Close()
+		err = t.file.Close()
 	}
 	return
 }
