@@ -87,60 +87,6 @@ func (sl *Strlock) RUnlock(key string) {
 	l.RUnlock()
 }
 
-// Await is a generic wait group implementation that allows setting channels for different keys.
-type Await[T any] struct {
-	m   *hashmap.Map[int64, chan T] // Map for storing channels indexed by keys
-	mux *Numlock                    // Mutex lock for synchronization
-}
-
-// NewAwait initializes and returns a new Await instance.
-func NewAwait[T any](muxlimit int) *Await[T] {
-	return &Await[T]{hashmap.NewMap[int64, chan T](), NewNumLock(muxlimit)}
-}
-
-// Get retrieves or creates a channel associated with the given index.
-func (at *Await[T]) Get(idx int64) (ch chan T) {
-	at.mux.Lock(idx)
-	defer at.mux.Unlock(idx)
-	var ok bool
-	if ch, ok = at.m.Get(idx); !ok {
-		ch = make(chan T, 1) // Create new channel if not found
-		at.m.Put(idx, ch)
-	}
-	return
-}
-
-// Has checks if a channel exists for the given index.
-func (at *Await[T]) Has(idx int64) bool {
-	return at.m.Has(idx)
-}
-
-// DelAndClose deletes and closes the channel associated with the given index.
-func (at *Await[T]) DelAndClose(idx int64) {
-	defer recoverpanic() // Recover from panic if it occurs
-	if at.m.Has(idx) {
-		at.mux.Lock(idx)
-		defer at.mux.Unlock(idx)
-		if o, ok := at.m.Get(idx); ok {
-			close(o)      // Close the channel
-			at.m.Del(idx) // Remove the channel from the map
-		}
-	}
-}
-
-// DelAndPut sends a value to the channel and deletes it from the map.
-func (at *Await[T]) DelAndPut(idx int64, v T) {
-	defer recoverpanic() // Recover from panic if it occurs
-	if at.m.Has(idx) {
-		at.mux.Lock(idx)
-		defer at.mux.Unlock(idx)
-		if o, ok := at.m.Get(idx); ok {
-			o <- v        // Send value to the channel
-			at.m.Del(idx) // Remove the channel from the map
-		}
-	}
-}
-
 // LimitLock limits the number of concurrent operations and can enforce timeouts.
 type LimitLock struct {
 	ch      chan int      // Channel used for limiting concurrency
