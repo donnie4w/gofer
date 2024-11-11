@@ -41,9 +41,11 @@ func (at *Await[T]) Has(idx int64) bool {
 	return at.m.Has(idx)
 }
 
-// DelAndClose deletes and closes the channel associated with the given index.
-func (at *Await[T]) DelAndClose(idx int64) {
-	defer recoverpanic() // Recover from panic if it occurs
+// Close deletes and closes the channel associated with the given index.
+func (at *Await[T]) Close(idx int64) {
+	defer recoverpanic(nil) // Recover from panic if it occurs
+	loop := 1000
+START:
 	if at.m.Has(idx) {
 		at.mux.Lock(idx)
 		defer at.mux.Unlock(idx)
@@ -51,33 +53,50 @@ func (at *Await[T]) DelAndClose(idx int64) {
 			at.m.Del(idx) // Remove the channel from the map
 			close(ch)     // Close the channel
 		}
+	} else if loop > 0 {
+		loop--
+		<-time.After(time.Millisecond)
+		goto START
 	}
 }
 
-// DelAndPut sends a value to the channel and deletes it from the map.
-func (at *Await[T]) DelAndPut(idx int64, v T) {
-	defer recoverpanic() // Recover from panic if it occurs
+// CloseAndPut sends a value to the channel and deletes it from the map.
+func (at *Await[T]) CloseAndPut(idx int64, v T) {
+	defer recoverpanic(nil) // Recover from panic if it occurs
+	loop := 1000
+START:
 	if at.m.Has(idx) {
 		at.mux.Lock(idx)
 		defer at.mux.Unlock(idx)
 		if ch, ok := at.m.Get(idx); ok {
-			ch <- v       // Send value to the channel
 			at.m.Del(idx) // Remove the channel from the map
+			ch <- v       // Send value to the channel
 			close(ch)
 		}
+	} else if loop > 0 {
+		loop--
+		<-time.After(time.Millisecond)
+		goto START
 	}
 }
 
 // Wait wait for the channel data to return or close, and set the timeout period
-func (at *Await[T]) Wait(idx int64, t time.Duration) (r T, err error) {
-	defer recoverpanic()
+func (at *Await[T]) Wait(idx int64, timeout time.Duration) (r T, err error) {
+	defer recoverpanic(&err)
+	defer at.m.Del(idx)
 	ch := at.Get(idx)
-	select {
-	case <-time.After(t):
-		close(ch)
-		return r, fmt.Errorf("timeout")
-	case r = <-ch:
-		return r, nil
+	defer close(ch)
+	if timeout > 0 {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			return r, fmt.Errorf("timeout")
+		case r = <-ch:
+			return r, nil
+		}
+	} else {
+		r = <-ch
 	}
 	return
 }
