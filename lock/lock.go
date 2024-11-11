@@ -9,6 +9,7 @@ package lock
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -128,7 +129,10 @@ func (ll *LimitLock) LockCount() int64 {
 	return atomic.LoadInt64(&ll.count) // Current lock acquisition count
 }
 
-func recoverpanic() {
+func recoverpanic(err *error) {
 	if r := recover(); r != nil {
+		if err != nil {
+			*err = fmt.Errorf("%v", r)
+		}
 	}
 }
