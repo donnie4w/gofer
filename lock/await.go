@@ -42,8 +42,8 @@ func (at *Await[T]) Has(idx int64) bool {
 }
 
 // Close deletes and closes the channel associated with the given index.
-func (at *Await[T]) Close(idx int64) {
-	defer recoverpanic(nil) // Recover from panic if it occurs
+func (at *Await[T]) Close(idx int64) (err error) {
+	defer recoverpanic(&err) // Recover from panic if it occurs
 	loop := 1000
 START:
 	if at.m.Has(idx) {
@@ -58,11 +58,12 @@ START:
 		<-time.After(time.Millisecond)
 		goto START
 	}
+	return
 }
 
 // CloseAndPut sends a value to the channel and deletes it from the map.
-func (at *Await[T]) CloseAndPut(idx int64, v T) {
-	defer recoverpanic(nil) // Recover from panic if it occurs
+func (at *Await[T]) CloseAndPut(idx int64, v T) (err error) {
+	defer recoverpanic(&err) // Recover from panic if it occurs
 	loop := 1000
 START:
 	if at.m.Has(idx) {
@@ -78,6 +79,7 @@ START:
 		<-time.After(time.Millisecond)
 		goto START
 	}
+	return
 }
 
 // Wait wait for the channel data to return or close, and set the timeout period
@@ -85,13 +87,16 @@ func (at *Await[T]) Wait(idx int64, timeout time.Duration) (r T, err error) {
 	defer recoverpanic(&err)
 	defer at.m.Del(idx)
 	ch := at.Get(idx)
-	defer close(ch)
 	if timeout > 0 {
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 		select {
 		case <-timer.C:
-			return r, fmt.Errorf("timeout")
+			defer func() {
+				defer recoverpanic(nil)
+				close(ch)
+			}()
+			return r, fmt.Errorf("wait %d timeout", idx)
 		case r = <-ch:
 			return r, nil
 		}
