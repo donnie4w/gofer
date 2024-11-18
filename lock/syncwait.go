@@ -73,17 +73,17 @@ func (sw *SyncWait) Wait(idx int64) {
 func (sw *SyncWait) WaitWithTimeOut(idx int64, timeout time.Duration) error {
 	defer sw.m.Del(idx)
 	wg := sw.get(idx)
-	done := make(chan struct{})
+	ch := make(chan struct{})
 	go func() {
 		wg.Wait()
-		close(done)
+		close(ch)
 	}()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case <-done:
+	case <-ch:
 		return nil
 	case <-timer.C:
-		return fmt.Errorf("timeout after %s", timeout)
+		return fmt.Errorf("wait %d timeout", idx)
 	}
 }
