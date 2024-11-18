@@ -30,3 +30,17 @@ func BenchmarkAwait(b *testing.B) {
 		}
 	})
 }
+
+func TestAwait(t *testing.T) {
+	aw := NewAwait[int](10) // 使用较
+	for i := 0; i < 10; i++ {
+		idx := int64(i)
+		go func(idx int64) {
+			time.Sleep(1 * time.Second)
+			aw.CloseAndPut(idx, 1)
+		}(idx)
+		v, err := aw.Wait(idx, time.Second)
+		t.Log(err, idx, v)
+	}
+	time.Sleep(3 * time.Second)
+}
