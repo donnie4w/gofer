@@ -8,7 +8,6 @@
 package lock
 
 import (
-	"fmt"
 	"github.com/donnie4w/gofer/hashmap"
 	"sync"
 	"time"
@@ -70,20 +69,20 @@ func (sw *SyncWait) Wait(idx int64) {
 }
 
 // WaitWithTimeOut wait for the channel data to return or close, and set the timeout period
-func (sw *SyncWait) WaitWithTimeOut(idx int64, timeout time.Duration) error {
-	defer sw.m.Del(idx)
-	wg := sw.get(idx)
-	ch := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case <-ch:
-		return nil
-	case <-timer.C:
-		return fmt.Errorf("wait %d timeout", idx)
-	}
-}
+//func (sw *SyncWait) WaitWithTimeOut(idx int64, timeout time.Duration) error {
+//	defer sw.m.Del(idx)
+//	wg := sw.get(idx)
+//	ch := make(chan struct{})
+//	go func() {
+//		wg.Wait()
+//		close(ch)
+//	}()
+//	timer := time.NewTimer(timeout)
+//	defer timer.Stop()
+//	select {
+//	case <-ch:
+//		return nil
+//	case <-timer.C:
+//		return fmt.Errorf("wait %d timeout", idx)
+//	}
+//}
