@@ -8,6 +8,7 @@
 package lock
 
 import (
+	"context"
 	"fmt"
 	"github.com/donnie4w/gofer/hashmap"
 	"time"
@@ -78,6 +79,32 @@ START:
 		loop--
 		<-time.After(time.Millisecond)
 		goto START
+	}
+	return
+}
+
+// WaitWithCancel wait for the channel data to return or close, and set the timeout period
+func (at *Await[T]) WaitWithCancel(ctx context.Context, idx int64, timeout time.Duration) (r T, isCancel bool, err error) {
+	defer recoverpanic(&err)
+	defer at.m.Del(idx)
+	ch := at.Get(idx)
+	if timeout > 0 {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return r, true, fmt.Errorf("cancel %d", idx)
+		case <-timer.C:
+			defer func() {
+				defer recoverpanic(nil)
+				close(ch)
+			}()
+			return r, false, fmt.Errorf("wait %d timeout", idx)
+		case r = <-ch:
+			return r, false, nil
+		}
+	} else {
+		r = <-ch
 	}
 	return
 }
