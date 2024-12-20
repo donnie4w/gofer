@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/donnie4w/gofer/hashmap"
+	"sync"
 	"time"
 )
 
@@ -93,6 +94,10 @@ func (at *Await[T]) WaitWithCancel(ctx context.Context, idx int64, timeout time.
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
+			defer func() {
+				defer recoverpanic(nil)
+				close(ch)
+			}()
 			return r, true, fmt.Errorf("cancel %d", idx)
 		case <-timer.C:
 			defer func() {
@@ -128,6 +133,36 @@ func (at *Await[T]) Wait(idx int64, timeout time.Duration) (r T, err error) {
 			return r, nil
 		}
 	} else {
+		r = <-ch
+	}
+	return
+}
+
+// SyncWait wait for the channel data to return or close, and set the timeout period
+func (at *Await[T]) SyncWait(wg *sync.WaitGroup, idx int64, timeout time.Duration) (r T, err error) {
+	defer recoverpanic(&err)
+	defer at.m.Del(idx)
+	ch := at.Get(idx)
+	if timeout > 0 {
+		if wg != nil {
+			wg.Done()
+		}
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			defer func() {
+				defer recoverpanic(nil)
+				close(ch)
+			}()
+			return r, fmt.Errorf("wait %d timeout", idx)
+		case r = <-ch:
+			return r, nil
+		}
+	} else {
+		if wg != nil {
+			wg.Done()
+		}
 		r = <-ch
 	}
 	return
