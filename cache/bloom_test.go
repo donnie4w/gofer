@@ -11,58 +11,36 @@ import (
 	"testing"
 )
 
-func BenchmarkParallelBloom(b *testing.B) {
-	bf := NewBloomFilter(1 << 20)
-	b.ResetTimer()
-	i := 0
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			i++
-			k := []byte(strconv.FormatInt(int64(i), 10))
-			bf.Add(k)
-			bf.Contains(k)
+func Test_bf(t *testing.T) {
+	filter := NewBloomFilter(1<<23, 0.01)
+
+	for i := range 31 {
+		filter.Add([]byte("apple==>" + strconv.Itoa(i)))
+	}
+
+	for i := range 31 {
+		bs := []byte("apple==>" + strconv.Itoa(i))
+		if !filter.Contains(bs) {
+			fmt.Printf("Item '%s' is definitely not present.\n", string(bs))
 		}
-	})
+	}
 }
 
-func BenchmarkParallelBloomGet(b *testing.B) {
-	bf := NewBloomFilter(1 << 20)
-	for i := range 1 << 18 {
-		k := []byte(strconv.FormatInt(int64(i), 10))
-		bf.Add(k)
+func BenchmarkBloom(b *testing.B) {
+	filter := NewBloomFilter(1<<20, 0.001)
+	fmt.Println(filter)
+	for i := 0; i <= 1<<17; i++ {
+		filter.Add([]byte("apple==>" + strconv.Itoa(i)))
 	}
 	b.ResetTimer()
 	i := 0
 	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			i++
-			k := []byte(strconv.FormatInt(int64(i), 10))
-			bf.Contains(k)
-		}
-	})
-}
-
-func BenchmarkSerialBloom(b *testing.B) {
-	bf := NewBloomFilter(1 << 20)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
 		i++
-		k := []byte(strconv.FormatInt(int64(i), 10))
-		bf.Add(k)
-		bf.Contains(k)
-	}
-}
-
-func TestBloom(t *testing.T) {
-	bf := NewBloomFilter(1 << 10)
-	for i := 0; i < 2030; i++ {
-		k := []byte(strconv.FormatInt(int64(i), 10))
-		bf.Add(k)
-	}
-	for i := 0; i < 2030; i++ {
-		k := []byte(strconv.FormatInt(int64(i), 10))
-		if !bf.Contains(k) {
-			fmt.Println(string(k))
+		for pb.Next() {
+			s := "apple==>" + strconv.Itoa(i)
+			if !filter.Contains([]byte(s)) {
+				panic(fmt.Sprintf("Item '%s' is definitely not present.\n", s))
+			}
 		}
-	}
+	})
 }
