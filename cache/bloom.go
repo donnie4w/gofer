@@ -8,113 +8,124 @@
 package cache
 
 import (
+	"fmt"
 	"hash/maphash"
+	"math"
 	"sync"
 	"sync/atomic"
 )
 
-var seed = maphash.MakeSeed()
-
-func hashcode(key []byte) uint32 {
-	return uint32(maphash.Bytes(seed, key))
+// BloomFilter represents a bloom filter with a fixed number of bits and hash functions.
+type BloomFilter struct {
+	bits          [3][]uint64 // Bit array to store the presence information for each segment.
+	hashCount     int         // Number of hash functions.
+	seeds         []maphash.Seed
+	mux           sync.Mutex
+	numCount      atomic.Uint64
+	arraySize     uint64
+	expectedItems uint64
 }
 
-type Bloomfilter struct {
-	dest       []byte
-	dest2      []byte
-	nBits      uint32
-	k          uint8
-	mux        *sync.RWMutex
-	limit      int
-	bitsPerKey int
-	count      int64
-}
-
-func NewBloomFilter(limit int) *Bloomfilter {
-	bitsPerKey := 10
-	limit = limit * 2
-	nBits := uint32(limit * bitsPerKey)
-	if nBits < 64 {
-		nBits = 64
-	}
-	k := uint8(bitsPerKey * 69 / 100) // 0.69 =~ ln(2)
-	if k < 1 {
+// NewBloomFilter creates a new bloom filter with the specified size, hash function count, and capacity.
+func NewBloomFilter(expectedItems uint64, falsePositiveRate float64) (r *BloomFilter) {
+	m := uint(-float64(expectedItems) * math.Log(falsePositiveRate) / (math.Log(2) * math.Log(2)))
+	k := int(float64(m) / float64(expectedItems) * math.Log(2))
+	if k == 0 {
 		k = 1
-	} else if k > 30 {
+	} else if k > 29 {
 		k = 30
 	}
-	return &Bloomfilter{
-		dest:       _newdest(nBits, k),
-		dest2:      _newdest(nBits, k),
-		nBits:      nBits,
-		k:          k,
-		limit:      limit,
-		bitsPerKey: bitsPerKey,
-		mux:        &sync.RWMutex{},
+	wordSize := uint64(64)
+	words := (uint64(m) + wordSize - 1) / wordSize
+	seeds := make([]maphash.Seed, k)
+	for i := range seeds {
+		seeds[i] = maphash.MakeSeed()
+	}
+	r = &BloomFilter{
+		hashCount:     k,
+		seeds:         seeds,
+		arraySize:     words,
+		expectedItems: expectedItems,
+	}
+	r.getBitIndex()
+	return
+}
+
+func (bf *BloomFilter) String() string {
+	return fmt.Sprintf("hashCount:%d,arraySize:%d,expectedItems:%d", bf.hashCount, bf.arraySize, bf.expectedItems)
+}
+
+// setBit sets the bit at the given index to 1.
+func (bf *BloomFilter) setBit(index uint64) {
+	wordIndex := index / 64
+	bitIndex := index % 64
+	id, _ := bf.getBitIndex()
+	bf.bits[id][wordIndex] |= (uint64(1) << bitIndex)
+}
+
+// testBit checks if the bit at the given index is set (returns true if set, false otherwise).
+func (bf *BloomFilter) testBit(index uint64) bool {
+	defer recoverPanic(nil)
+	wordIndex := index / 64
+	bitIndex := index % 64
+	id, prevId := bf.getBitIndex()
+	offset := uint64(1) << bitIndex
+	return (bf.bits[id][wordIndex]&offset) != 0 || (bf.bits[prevId][wordIndex]&offset) != 0
+}
+
+// Add adds an item (as byte slice) to the bloom filter using multiple hash functions.
+func (bf *BloomFilter) Add(item []byte) {
+	defer recoverPanic(nil)
+	bf.numCount.Add(1)
+	for i := 0; i < bf.hashCount; i++ {
+		index := bf.hash(item, bf.seeds[i]) % (bf.arraySize * 64)
+		bf.setBit(index)
 	}
 }
 
-func _newdest(nBits uint32, k uint8) (dest []byte) {
-	dest = make([]byte, int((nBits+7)/8)+1)
-	dest[(nBits+7)/8] = k
-	return dest
-}
-
-func (this *Bloomfilter) Add(key []byte) {
-	this.mux.Lock()
-	defer this.mux.Unlock()
-	if key != nil {
-		this._add(key)
-		c := atomic.AddInt64(&this.count, 1)
-		if c%int64(this.limit) == int64(this.limit)/2 {
-			this.dest = _newdest(this.nBits, this.k)
-		}
-		if c%int64(this.limit) == int64(this.limit)-1 {
-			this.dest2 = _newdest(this.nBits, this.k)
-		}
-	}
-}
-
-func (this *Bloomfilter) _add(key []byte) {
-	kh := hashcode(key)
-	delta := (kh >> 17) | (kh << 15)
-	for j := uint8(0); j < this.k; j++ {
-		bitpos := kh % this.nBits
-		this.dest[bitpos/8] |= (1 << (bitpos % 8))
-		this.dest2[bitpos/8] |= (1 << (bitpos % 8))
-		kh += delta
-	}
-}
-
-func (this *Bloomfilter) Contains(key []byte) bool {
-	this.mux.RLock()
-	defer this.mux.RUnlock()
-	c := this.count
-	if c%int64(this.limit) >= int64(this.limit)/2 && c%int64(this.limit) < int64(this.limit)-1 {
-		return contains(this.dest2, key)
-	} else {
-		return contains(this.dest, key)
-	}
-}
-
-func contains(filter, key []byte) bool {
-	nBytes := len(filter) - 1
-	if nBytes < 1 {
-		return false
-	}
-	nBits := uint32(nBytes * 8)
-	k := filter[nBytes]
-	if k > 30 {
-		return true
-	}
-	kh := hashcode(key)
-	delta := (kh >> 17) | (kh << 15)
-	for j := uint8(0); j < k; j++ {
-		bitpos := kh % nBits
-		if (uint32(filter[bitpos/8]) & (1 << (bitpos % 8))) == 0 {
+// Contains if an item (as byte slice) is possibly in the bloom filter.
+func (bf *BloomFilter) Contains(item []byte) bool {
+	defer recoverPanic(nil)
+	for i := 0; i < bf.hashCount; i++ {
+		index := bf.hash(item, bf.seeds[i]) % (bf.arraySize * 64)
+		if !bf.testBit(index) {
 			return false
 		}
-		kh += delta
 	}
 	return true
+}
+
+func (bf *BloomFilter) getBitIndex() (index, prevIndex int) {
+	f := bf.numCount.Load() % (bf.expectedItems*3 + 1)
+	rmIndex := 0
+	if f < bf.expectedItems {
+		index, rmIndex, prevIndex = 0, 1, 2
+	} else if f < bf.expectedItems*2 {
+		index, rmIndex, prevIndex = 1, 2, 0
+	} else {
+		index, rmIndex, prevIndex = 2, 0, 1
+	}
+	if bf.bits[index] == nil {
+		bf.mux.Lock()
+		if bf.bits[index] == nil {
+			bf.bits[index] = make([]uint64, bf.arraySize)
+		}
+		if bf.bits[rmIndex] != nil {
+			bf.bits[rmIndex] = nil
+		}
+		bf.mux.Unlock()
+	}
+	return
+}
+
+func (bf *BloomFilter) hash(item []byte, seed maphash.Seed) uint64 {
+	return maphash.Bytes(seed, item)
+}
+
+func recoverPanic(err *error) {
+	if r := recover(); r != nil {
+		if err != nil {
+			*err = fmt.Errorf("%v", r)
+		}
+	}
 }
