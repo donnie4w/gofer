@@ -77,13 +77,16 @@ func Hash64(key []byte) uint64 {
 	return maphash.Bytes(seed, key)
 }
 
-func Hash32(key []byte) uint32 {
+func FNVHash32(data []byte) uint32 {
 	h := fnv.New32a()
-	if _, err := h.Write(key); err == nil {
-		return h.Sum32()
-	} else {
-		return CRC32(key)
-	}
+	h.Write(data)
+	return h.Sum32()
+}
+
+func FNVHash64(data []byte) uint64 {
+	h := fnv.New64a()
+	h.Write(data)
+	return h.Sum64()
 }
 
 func RandUint(i uint) uint {
