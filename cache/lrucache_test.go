@@ -24,7 +24,7 @@ func BenchmarkParallelLru(b *testing.B) {
 		for pb.Next() {
 			i++
 			k := int64(i)
-			//lc.Add(k, time.Now().UnixNano())
+			//lc.add(k, time.Now().UnixNano())
 			//if k%5 == 0 {
 			//	lc.Remove(k)
 			//}
@@ -43,7 +43,7 @@ func BenchmarkSerialLru(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		k := int64(i)
-		//lc.Add(k, time.Now().UnixNano())
+		//lc.add(k, time.Now().UnixNano())
 		//if k%5 == 0 {
 		//	lc.Remove(k)
 		//}
