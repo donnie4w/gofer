@@ -211,8 +211,8 @@ func (t *Map[K, V]) Range(f func(k K, v V) bool) {
 //	return
 //}
 //
-//func (t *SortMap[K, V]) Len() int {
-//	return t.l.Len()
+//func (t *SortMap[K, V]) len() int {
+//	return t.l.len()
 //}
 
 /************************************************************/
@@ -253,8 +253,8 @@ func (t *Map[K, V]) Range(f func(k K, v V) bool) {
 //	return t.m.Has(key)
 //}
 //
-//func (t *LinkedMap[K, V]) Len() int {
-//	return t.l.Len()
+//func (t *LinkedMap[K, V]) len() int {
+//	return t.l.len()
 //}
 //
 //func (t *LinkedMap[K, V]) Del(key K) (ok bool) {
