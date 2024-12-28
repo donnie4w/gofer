@@ -18,11 +18,15 @@ import (
 
 type FastAwait[T any] struct {
 	db *hashmap.Map[int64, chan T]
-	bf *cache.Bloomfilter
+	bf *cache.BloomFilter
 }
 
 func NewFastAwait[T any]() *FastAwait[T] {
-	return &FastAwait[T]{db: hashmap.NewMap[int64, chan T](), bf: cache.NewBloomFilter(1 << 20)}
+	return &FastAwait[T]{db: hashmap.NewMap[int64, chan T](), bf: cache.NewBloomFilter(1<<20, 0.001)}
+}
+
+func NewFastAwait2[T any](expectedItems uint64) *FastAwait[T] {
+	return &FastAwait[T]{db: hashmap.NewMap[int64, chan T](), bf: cache.NewBloomFilter(expectedItems, 0.001)}
 }
 
 func (fa *FastAwait[T]) del(syncId int64) {
