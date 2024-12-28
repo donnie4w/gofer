@@ -45,6 +45,19 @@ func BenchmarkSerialLimittreeMap(b *testing.B) {
 
 func Test_treeMap(t *testing.T) {
 	tm := NewTreeMap[int, int64](32)
+	tm.Put(3, 3)
+	tm.Put(4, 4)
+	tm.Put(1, 1)
+	tm.Put(2, 2)
+	tm.Put(2, 2)
+	tm.Ascend(func(i int, i2 int64) bool {
+		t.Log(i, ":", i2)
+		return true
+	})
+}
+
+func Test_treeMap2(t *testing.T) {
+	tm := NewTreeMap[int, int64](32)
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		go func(i int) {
