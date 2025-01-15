@@ -52,7 +52,7 @@ func NewBloomFilter(expectedItems uint64, falsePositiveRate float64) (r *BloomFi
 }
 
 func (bf *BloomFilter) String() string {
-	return fmt.Sprintf("hashCount:%d,arraySize:%d,expectedItems:%d", bf.hashCount, bf.arraySize, bf.expectedItems)
+	return fmt.Sprintf("hashCount:%d,arraySize:%d,expectedItems:%d,bytes:%d", bf.hashCount, bf.arraySize, bf.expectedItems, bf.arraySize*8*2)
 }
 
 // setBit sets the bit at the given index to 1.

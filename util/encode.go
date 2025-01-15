@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/donnie4w/gofer/uuid"
+	"golang.org/x/crypto/blake2b"
 	"golang.org/x/exp/mmap"
 	"hash/crc32"
 	"hash/crc64"
@@ -149,4 +150,14 @@ func Recover(err *error) {
 			*err = fmt.Errorf("%v", e)
 		}
 	}
+}
+
+func Blake2b(input []byte) ([]byte, error) {
+	hasher, err := blake2b.New256(nil)
+	if err != nil {
+		return nil, err
+	}
+	hasher.Write(input)
+	blake2b.Sum256(input)
+	return hasher.Sum(nil), nil
 }

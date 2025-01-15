@@ -12,8 +12,8 @@ import (
 )
 
 func Test_bf(t *testing.T) {
-	filter := NewBloomFilter(1<<23, 0.01)
-
+	filter := NewBloomFilter(1<<21, 0.0001)
+	t.Log(filter)
 	for i := range 31 {
 		filter.Add([]byte("apple==>" + strconv.Itoa(i)))
 	}
