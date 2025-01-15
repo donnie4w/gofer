@@ -34,15 +34,20 @@ func NewNumLock(muxNum int) *Numlock {
 }
 
 // Lock acquires the lock associated with the given key.
-func (nl *Numlock) Lock(key int64) {
+func (nl *Numlock) Lock(key int64) *sync.Mutex {
 	l, _ := nl.lockm.Get(int64(uint64(key) % uint64(nl.muxNum)))
 	l.Lock()
+	return l
 }
 
 // TryLock try to acquire the lock associated with the given key.
-func (nl *Numlock) TryLock(key int64) bool {
+func (nl *Numlock) TryLock(key int64) (*sync.Mutex, bool) {
 	l, _ := nl.lockm.Get(int64(uint64(key) % uint64(nl.muxNum)))
-	return l.TryLock()
+	if l.TryLock() {
+		return l, true
+	} else {
+		return nil, false
+	}
 }
 
 // Unlock releases the lock associated with the given key.
@@ -67,17 +72,22 @@ func NewStrlock(muxNum int) *Strlock {
 }
 
 // Lock acquires the write lock associated with the given key.
-func (sl *Strlock) Lock(key string) {
+func (sl *Strlock) Lock(key string) *sync.RWMutex {
 	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.Lock()
+	return l
 }
 
 // TryLock try to acquire the write lock associated with the given key.
-func (sl *Strlock) TryLock(key string) bool {
+func (sl *Strlock) TryLock(key string) (*sync.RWMutex, bool) {
 	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
-	return l.TryLock()
+	if l.TryRLock() {
+		return l, true
+	} else {
+		return nil, false
+	}
 }
 
 // Unlock releases the write lock associated with the given key.
@@ -88,17 +98,22 @@ func (sl *Strlock) Unlock(key string) {
 }
 
 // RLock acquires the read lock associated with the given key.
-func (sl *Strlock) RLock(key string) {
+func (sl *Strlock) RLock(key string) *sync.RWMutex {
 	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
 	l.RLock()
+	return l
 }
 
 // TryRLock try to acquire the read lock associated with the given key.
-func (sl *Strlock) TryRLock(key string) bool {
+func (sl *Strlock) TryRLock(key string) (*sync.RWMutex, bool) {
 	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
-	return l.TryRLock()
+	if l.TryRLock() {
+		return l, true
+	} else {
+		return nil, false
+	}
 }
 
 // RUnlock releases the read lock associated with the given key.
