@@ -83,7 +83,7 @@ func (sl *Strlock) Lock(key string) *sync.RWMutex {
 func (sl *Strlock) TryLock(key string) (*sync.RWMutex, bool) {
 	u := util.Hash64([]byte(key)) // Calculate hash of key
 	l, _ := sl.lockm.Get(int64(u % uint64(sl.muxNum)))
-	if l.TryRLock() {
+	if l.TryLock() {
 		return l, true
 	} else {
 		return nil, false
