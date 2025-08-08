@@ -93,23 +93,38 @@ func UnSnappy(bs []byte) (_r []byte, err error) {
 	return
 }
 
+// Zstd 压缩（使用默认级别）
 func Zstd(bs []byte) (_r []byte, err error) {
-	var encoder *zstd.Encoder
-	if encoder, err = zstd.NewWriter(nil); err == nil {
-		_r = encoder.EncodeAll(bs, make([]byte, 0, len(bs)))
+	encoder, err := zstd.NewWriter(nil)
+	if err != nil {
+		return nil, err
 	}
-	return
+	defer encoder.Close()
+
+	// 使用 EncodeAll，预分配适当容量
+	dst := make([]byte, 0, len(bs)) // 可进一步优化为 len(bs)*0.5 ~ 0.8
+	return encoder.EncodeAll(bs, dst), nil
 }
 
+// ZstdLevel 压缩（指定压缩级别）
 func ZstdLevel(bs []byte, level zstd.EncoderLevel) (_r []byte, err error) {
-	var encoder *zstd.Encoder
-	if encoder, err = zstd.NewWriter(nil, zstd.WithEncoderLevel(level)); err == nil {
-		_r = encoder.EncodeAll(bs, make([]byte, 0, len(bs)))
+	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(level))
+	if err != nil {
+		return nil, err
 	}
-	return
+	defer encoder.Close()
+
+	dst := make([]byte, 0, len(bs))
+	return encoder.EncodeAll(bs, dst), nil
 }
 
+// UnZstd 解压
 func UnZstd(bs []byte) ([]byte, error) {
-	var decoder, _ = zstd.NewReader(nil, zstd.WithDecoderConcurrency(0))
+	decoder, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(0))
+	if err != nil {
+		return nil, err
+	}
+	defer decoder.Close()
+
 	return decoder.DecodeAll(bs, nil)
 }
