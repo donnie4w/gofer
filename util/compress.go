@@ -18,10 +18,11 @@ import (
 func Zlib(bs []byte) (_r []byte, err error) {
 	var buf bytes.Buffer
 	var compressor *zlib.Writer
-	if compressor, err = zlib.NewWriterLevel(&buf, zlib.BestCompression); err == nil {
+	if compressor, err = zlib.NewWriterLevel(&buf, zlib.DefaultCompression); err == nil {
 		defer compressor.Close()
-		compressor.Write(bs)
-		compressor.Flush()
+		if _, err = compressor.Write(bs); err != nil {
+			return nil, err
+		}
 		_r = buf.Bytes()
 	} else {
 		_r = bs
