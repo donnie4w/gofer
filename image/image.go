@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"sort"
 
 	"github.com/chai2010/webp"
@@ -110,6 +112,157 @@ const (
 
 type Image struct {
 	ResizeFilter ResampleFilter
+}
+
+func ResizeGIF(srcData []byte, targetWidth, targetHeight int) ([]byte, error) {
+	gifImg, err := gif.DecodeAll(bytes.NewReader(srcData))
+	if err != nil {
+		return srcData, err
+	}
+	resizedGif, err := resizeGIF(gifImg, targetWidth, targetHeight)
+	if err != nil {
+		panic(err)
+	}
+
+	var buf bytes.Buffer
+	gif.EncodeAll(&buf, resizedGif)
+
+	return buf.Bytes(), nil
+}
+
+// resizeGIF
+func resizeGIF(g *gif.GIF, targetWidth, targetHeight int) (*gif.GIF, error) {
+	if g == nil || len(g.Image) == 0 {
+		return nil, nil
+	}
+	canvasRect := image.Rect(0, 0, 0, 0)
+	for _, frame := range g.Image {
+		canvasRect = canvasRect.Union(frame.Bounds())
+	}
+	canvasW := canvasRect.Dx()
+	canvasH := canvasRect.Dy()
+
+	var scale float64 = 1.0
+	if targetWidth > 0 || targetHeight > 0 {
+		scaleX := math.Inf(1)
+		scaleY := math.Inf(1)
+		if targetWidth > 0 {
+			scaleX = float64(targetWidth) / float64(canvasW)
+		}
+		if targetHeight > 0 {
+			scaleY = float64(targetHeight) / float64(canvasH)
+		}
+		scale = math.Min(scaleX, scaleY)
+		if scale > 1.0 {
+			scale = 1.0 // optional: prevent upscaling
+		}
+	}
+
+	newW := int(float64(canvasW) * scale)
+	newH := int(float64(canvasH) * scale)
+
+	newGIF := &gif.GIF{
+		Delay:     g.Delay,
+		Disposal:  g.Disposal,
+		LoopCount: g.LoopCount,
+		Config: image.Config{
+			ColorModel: g.Image[0].ColorModel(),
+			Width:      newW,
+			Height:     newH,
+		},
+	}
+
+	for _, frame := range g.Image {
+		// Create full-size RGBA canvas
+		fullCanvas := image.NewRGBA(canvasRect)
+		draw.Draw(fullCanvas, frame.Bounds(), frame, frame.Bounds().Min, draw.Src)
+
+		// Resize full canvas
+		scaled := imaging.Resize(imaging.Blur(fullCanvas, 0.5), newW, newH, imaging.Lanczos)
+
+		// Convert back to paletted
+		pal := image.NewPaletted(scaled.Bounds(), frame.Palette)
+		draw.FloydSteinberg.Draw(pal, pal.Rect, scaled, image.Point{})
+
+		newGIF.Image = append(newGIF.Image, pal)
+	}
+
+	return newGIF, nil
+}
+
+func (t *Image) parseImage(img image.Image, width, height int, mode Mode, options *Options) image.Image {
+	if options == nil {
+		options = &Options{}
+	}
+
+	if options.CropAnchor != nil && len(options.CropAnchor) == 4 {
+		if i, err := cropImageByAnchor(img, options.CropAnchor[0], options.CropAnchor[1], options.CropAnchor[2], options.CropAnchor[3]); err == nil {
+			img = i
+		}
+	}
+
+	if options.CropSide != nil && len(options.CropSide) == 4 {
+		if i, err := cropImageBySide(img, options.CropSide[0], options.CropSide[1], options.CropSide[2], options.CropSide[3]); err == nil {
+			img = i
+		}
+	}
+
+	if options.ScaleUpper != nil && len(options.ScaleUpper) >= 2 {
+		maxPixel := 0
+		if len(options.ScaleUpper) == 3 {
+			maxPixel = options.ScaleUpper[2]
+		}
+		if i, err := scaleImageWithRatio(img, options.ScaleUpper[0], options.ScaleUpper[1], maxPixel, false); err == nil {
+			img = i
+		}
+	}
+
+	if options.ScaleLower != nil && len(options.ScaleLower) >= 2 {
+		maxPixel := 0
+		if len(options.ScaleLower) == 3 {
+			maxPixel = options.ScaleLower[2]
+		}
+		if i, err := scaleImageWithRatio(img, options.ScaleLower[0], options.ScaleLower[1], maxPixel, true); err == nil {
+			img = i
+		}
+	}
+
+	if width > 0 || height > 0 {
+		w := img.Bounds().Dx()
+		h := img.Bounds().Dy()
+		nw, nh, resizeType := praseMode(mode, w, h, width, height)
+		switch resizeType {
+		case SCALE:
+			img = imaging.Resize(img, nw, nh, t.selectFilter())
+		case THUMBNAIL:
+			img = imaging.Fill(img, nw, nh, imaging.Center, t.selectFilter())
+		}
+	}
+
+	if options.Gray {
+		img = convertToGrayByImage(img)
+	}
+
+	if options.Invert {
+		img = invertByImage(img)
+	}
+
+	if options.Rotate != 0 {
+		img = rotateImage(img, options.Rotate)
+	}
+
+	if options.FlipH {
+		img = flipHImage(img)
+	}
+
+	if options.FlipV {
+		img = flipVImage(img)
+	}
+
+	if options.Blur > 0 {
+		img = blurGaussianImage(img, options.Blur)
+	}
+	return img
 }
 
 func (t *Image) Encode(srcData []byte, width, height int, mode Mode, options *Options) (destData []byte, err error) {
