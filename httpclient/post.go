@@ -9,51 +9,66 @@ package httpclient
 
 import (
 	"bytes"
-	"crypto/tls"
+	"context"
+	"fmt"
 	"io"
 	"net/http"
-	"strings"
 )
 
-func Post(bs []byte, url string) (_r []byte, err error) {
-	return Post2(bs, false, url)
+// Post ：基础用法
+func Post(url string, body []byte) ([]byte, error) {
+	return PostWithOptions(context.Background(), url, body, nil, nil)
 }
 
-func Post2(bs []byte, close bool, url string) (_r []byte, err error) {
-	return Post3(bs, close, url, nil, nil)
+// PostWithHeader ：支持 header
+func PostWithHeader(
+	url string,
+	body []byte,
+	header map[string]string,
+) ([]byte, error) {
+	return PostWithOptions(context.Background(), url, body, header, nil)
 }
 
-func Post3(bs []byte, close bool, url string, header map[string]string, c *http.Cookie) (_r []byte, err error) {
-	transport := &http.Transport{DisableKeepAlives: true}
-	if strings.HasPrefix(url, "https:") {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+// PostWithOptions ：完整参数
+func PostWithOptions(
+	ctx context.Context,
+	url string,
+	body []byte,
+	header map[string]string,
+	cookies []*http.Cookie,
+) ([]byte, error) {
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		url,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, err
 	}
-	client := http.Client{Transport: transport}
-	var req *http.Request
-	var reader io.Reader
-	if len(bs) > 0 {
-		reader = bytes.NewReader(bs)
+
+	for k, v := range header {
+		req.Header.Set(k, v)
 	}
-	if req, err = http.NewRequest(http.MethodPost, url, reader); err == nil {
-		if close {
-			req.Close = true
-		}
-		if len(header) > 0 {
-			for k, v := range header {
-				req.Header.Set(k, v)
-			}
-		}
-		if c != nil {
-			req.AddCookie(c)
-		}
-		var resp *http.Response
-		if resp, err = client.Do(req); err == nil {
-			defer resp.Body.Close()
-			var body []byte
-			if body, err = io.ReadAll(resp.Body); err == nil {
-				_r = body
-			}
-		}
+
+	for _, c := range cookies {
+		req.AddCookie(c)
 	}
-	return
+
+	resp, err := Client().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("http %d: %s", resp.StatusCode, data)
+	}
+
+	return data, nil
 }
