@@ -10,7 +10,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"os"
+	"runtime"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -94,10 +98,11 @@ func Test_int32Tbs(t *testing.T) {
 }
 
 func Benchmark_maphash(b *testing.B) {
-	ib := Hash64([]byte("1234567789qwertyuiop"))
+	ib := FNVHash64([]byte("1234567789qwertyuiop"))
+	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if Hash64([]byte("1234567789qwertyuiop")) != ib {
+			if FNVHash64([]byte("1234567789qwertyuiop")) != ib {
 				panic("err")
 			}
 		}
@@ -159,7 +164,8 @@ func TestCrc(t *testing.T) {
 
 func TestRandUint(t *testing.T) {
 	for range 10 {
-		t.Log(RandUint(10))
+		//t.Log(RandUint(10))
+		t.Log(RandUintCrypto(10))
 	}
 }
 
@@ -169,4 +175,63 @@ func BenchmarkRandUint(b *testing.B) {
 			RandUint(10)
 		}
 	})
+}
+
+// 测试并发调用 Hash64
+func TestMaphashRace(t *testing.T) {
+	//  强制Go使用所有CPU核心（关键）
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	//  准备128字节随机数据（放大雪崩效应）
+	key := make([]byte, 128)
+	for i := range key {
+		key[i] = byte(i%256 + 1) // 避免0值，放大Seed错误的影响
+	}
+
+	//  单协程计算预期值（确保初始值正确）
+	expected := Hash64(key)
+	t.Logf("预期hash值：%d", expected)
+
+	//  原子变量统计错误数（避免竞态）
+	var errCount uint64
+	var wg sync.WaitGroup
+
+	//  启动与CPU核心数匹配的协程（核心：让每个核心都跑满，并行读取Seed）
+	cpuNum := runtime.NumCPU()
+	goroutineNum := cpuNum * 2000 // 每个核心跑2000个协程，制造并行压力
+	for i := 0; i < goroutineNum; i++ {
+		wg.Add(1)
+		// 闭包捕获i，避免协程复用（关键）
+		go func(idx int) {
+			defer wg.Done()
+			// 内层循环加随机休眠，强制触发协程切换（核心）
+			for j := 0; j < 100000; j++ {
+				// 随机休眠1ns，强制CPU切换协程，制造Seed读取中断
+				if j%100 == 0 {
+					runtime.Gosched() // 主动让出CPU，放大调度中断概率
+				}
+
+				actual := Hash64(key)
+				if actual != expected {
+					atomic.AddUint64(&errCount, 1)
+					// 只打印一次错误，避免刷屏
+					if atomic.LoadUint64(&errCount) == 1 {
+						t.Errorf("协程%d：hash值不一致！预期=%d，实际=%d", idx, expected, actual)
+						// 触发错误后直接退出，无需继续测试
+						os.Exit(1)
+					}
+				}
+			}
+		}(i)
+	}
+
+	// 启动CPU压力协程，模拟生产环境负载
+	go func() {
+		for {
+			_ = 1 + 1 // 空循环占用CPU，制造调度压力
+		}
+	}()
+
+	wg.Wait()
+	t.Logf("测试完成，总错误数：%d", errCount)
 }
