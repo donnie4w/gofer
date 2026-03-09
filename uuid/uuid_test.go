@@ -13,17 +13,29 @@ import (
 	"testing"
 )
 
-func Benchmark_NewUUID(b *testing.B) {
+func BenchmarkParallel_NewUUID(b *testing.B) {
+	SetSecureMode(true)
+	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			for range 10 {
 				//NewUUID().Int32()
-				NewUUID().Int64()
+				//NewSecureUUID()
+				NewUUID()
 				//NewUUID().Base58()
 				//NewUUID().String()
 			}
 		}
 	})
+}
+
+func Benchmark_NewUUID(b *testing.B) {
+	SetSecureMode(true)
+	b.ResetTimer()
+	for range b.N {
+		//NewSecureUUID()
+		NewUUID()
+	}
 }
 
 func Benchmark_UUID_UNI(b *testing.B) {
@@ -52,6 +64,6 @@ func Test_UUID_UNI(t *testing.T) {
 
 func Test_NewUUID(t *testing.T) {
 	for range 10 {
-		fmt.Println(NewUUID().String())
+		fmt.Println(NewSecureUUID())
 	}
 }
