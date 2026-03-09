@@ -1,6 +1,6 @@
 // Copyright (c) 2023, donnie <donnie4w@gmail.com>
 // All rights reserved.
-// Use of t source code is governed by a BSD-style
+// Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
 // github.com/donnie4w/gofer/lock
@@ -10,115 +10,121 @@ package lock
 import (
 	"context"
 	"fmt"
-	"github.com/donnie4w/gofer/cache"
 	"github.com/donnie4w/gofer/hashmap"
-	"github.com/donnie4w/gofer/util"
+	"sync"
 	"time"
 )
 
+type future[T any] struct {
+	ch   chan T
+	once sync.Once
+}
+
+func (f *future[T]) close() {
+	f.once.Do(func() { close(f.ch) })
+}
+
+func (f *future[T]) put(v T) {
+	f.once.Do(func() {
+		f.ch <- v
+		close(f.ch)
+	})
+}
+
 type FastAwait[T any] struct {
-	db *hashmap.Map[int64, chan T]
-	bf *cache.BloomFilter
+	db *hashmap.Map[int64, *future[T]]
 }
 
 func NewFastAwait[T any]() *FastAwait[T] {
-	return &FastAwait[T]{db: hashmap.NewMap[int64, chan T](), bf: cache.NewBloomFilter(1<<20, 0.001)}
+	return &FastAwait[T]{db: hashmap.NewMap[int64, *future[T]]()}
 }
 
-func NewFastAwait2[T any](expectedItems uint64) *FastAwait[T] {
-	return &FastAwait[T]{db: hashmap.NewMap[int64, chan T](), bf: cache.NewBloomFilter(expectedItems, 0.001)}
-}
-
-func (fa *FastAwait[T]) del(syncId int64) {
-	fa.bf.Add(util.Int64ToBytes(syncId))
-	fa.db.Del(syncId)
-}
-
-func (fa *FastAwait[T]) isDel(syncId int64) bool {
-	return fa.bf.Contains(util.Int64ToBytes(syncId))
+func (fa *FastAwait[T]) getFuture(syncId int64) *future[T] {
+	if v, ok := fa.db.Get(syncId); ok {
+		return v
+	}
+	f := &future[T]{ch: make(chan T, 1)}
+	v, _ := fa.db.GetOrInsert(syncId, f)
+	return v
 }
 
 func (fa *FastAwait[T]) Wait(syncId int64, timeout time.Duration) (r T, err error) {
-	defer recoverpanic(&err)
-	ch := make(chan T, 1)
-	fa.db.Put(syncId, ch)
-	defer fa.del(syncId)
+	defer recoverfunc(&err)
+
+	f := fa.getFuture(syncId)
+	defer fa.db.Del(syncId)
+
 	if timeout > 0 {
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
+
 		select {
 		case <-timer.C:
-			defer func() {
-				defer recoverpanic(nil)
-				close(ch)
-			}()
+			f.close()
 			return r, fmt.Errorf("wait %d timeout", syncId)
-		case r = <-ch:
+		case r = <-f.ch:
 			return
 		}
-	} else {
-		r = <-ch
 	}
+	r = <-f.ch
 	return
 }
 
 func (fa *FastAwait[T]) WaitWithCancel(ctx context.Context, syncId int64, timeout time.Duration) (r T, cancel bool, err error) {
-	defer recoverpanic(&err)
-	ch := make(chan T, 1)
-	fa.db.Put(syncId, ch)
-	defer fa.del(syncId)
+	defer recoverfunc(&err)
+
+	f := fa.getFuture(syncId)
+	defer fa.db.Del(syncId)
+
 	if timeout > 0 {
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
+
 		select {
 		case <-ctx.Done():
-			defer func() {
-				defer recoverpanic(nil)
-				close(ch)
-			}()
+			f.close()
 			return r, true, fmt.Errorf("wait %d cancel", syncId)
 		case <-timer.C:
-			defer func() {
-				defer recoverpanic(nil)
-				close(ch)
-			}()
+			f.close()
 			return r, false, fmt.Errorf("wait %d timeout", syncId)
-		case r = <-ch:
+		case r = <-f.ch:
 			return
 		}
-	} else {
-		r = <-ch
 	}
-	return
+
+	select {
+	case <-ctx.Done():
+		f.close()
+		return r, true, fmt.Errorf("wait %d cancel", syncId)
+	case r = <-f.ch:
+		return
+	}
 }
 
 func (fa *FastAwait[T]) CloseAndPut(syncId int64, v T) (err error) {
-	defer recoverpanic(&err)
-	loop := 30
-START:
-	if ch, ok := fa.db.Get(syncId); ok {
-		defer close(ch)
-		fa.db.Del(syncId)
-		ch <- v
-	} else if !fa.isDel(syncId) && loop > 0 {
-		loop--
-		<-time.After(100 * time.Millisecond)
-		goto START
-	}
-	return
+	defer recoverfunc(&err)
+	return fa.notify(syncId, v, true)
 }
 
 func (fa *FastAwait[T]) Close(syncId int64) (err error) {
-	defer recoverpanic(&err)
-	loop := 30
-START:
-	if ch, ok := fa.db.Get(syncId); ok {
-		defer close(ch)
-		fa.db.Del(syncId)
-	} else if !fa.isDel(syncId) && loop > 0 {
+	defer recoverfunc(&err)
+	return fa.notify(syncId, *new(T), false)
+}
+
+func (fa *FastAwait[T]) notify(syncId int64, v T, withValue bool) error {
+	loop := defaultRetryLoop
+	for loop > 0 {
+		if f, ok := fa.db.Get(syncId); ok {
+			fa.db.Del(syncId)
+			if withValue {
+				f.put(v)
+			} else {
+				f.close()
+			}
+			return nil
+		}
 		loop--
-		<-time.After(100 * time.Millisecond)
-		goto START
+		time.Sleep(retryInterval)
 	}
-	return
+	return nil // If registration is not completed within 3 seconds, the data will be discarded.
 }
