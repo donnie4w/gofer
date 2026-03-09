@@ -30,6 +30,9 @@ type TreeMap[K cmp.Ordered, V any] struct {
 
 // NewTreeMap Create a new instance of TreeMap with a specified degree for the underlying B-tree.
 func NewTreeMap[K cmp.Ordered, V any](degree int) *TreeMap[K, V] {
+	if degree < 2 {
+		panic("btree degree must be >= 2")
+	}
 	return &TreeMap[K, V]{tree: btree.New(degree)}
 }
 
@@ -56,28 +59,56 @@ func (m *TreeMap[K, V]) Get(key K) (V, bool) {
 }
 
 // Del Delete a key from the TreeMap.
-func (m *TreeMap[K, V]) Del(key K) {
+func (m *TreeMap[K, V]) Del(key K) (prev V, existed bool) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	m.tree.Delete(treeItem[K, V]{Key: key})
+	if item := m.tree.Delete(treeItem[K, V]{Key: key}); item != nil {
+		return item.(treeItem[K, V]).Value, true
+	}
+	return
 }
 
 // Ascend Traverse all elements in ascending order based on their keys, executing the iterator function.
 func (m *TreeMap[K, V]) Ascend(iter func(K, V) bool) {
 	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	keys := make([]K, 0, m.tree.Len())
 	m.tree.Ascend(func(item btree.Item) bool {
-		i := item.(treeItem[K, V])
-		return iter(i.Key, i.Value)
+		keys = append(keys, item.(treeItem[K, V]).Key)
+		return true
 	})
+	m.mutex.RUnlock()
+
+	for _, k := range keys {
+		if v, ok := m.Get(k); ok {
+			if !iter(k, v) {
+				return
+			}
+		}
+	}
 }
 
 // Descend Traverse all elements in descending order based on their keys, executing the iterator function.
 func (m *TreeMap[K, V]) Descend(iter func(K, V) bool) {
 	m.mutex.RLock()
-	defer m.mutex.RUnlock()
+	keys := make([]K, 0, m.tree.Len())
 	m.tree.Descend(func(item btree.Item) bool {
-		i := item.(treeItem[K, V])
-		return iter(i.Key, i.Value)
+		keys = append(keys, item.(treeItem[K, V]).Key)
+		return true
 	})
+	m.mutex.RUnlock()
+
+	for _, k := range keys {
+		if v, ok := m.Get(k); ok {
+			if !iter(k, v) {
+				return
+			}
+		}
+	}
+
+}
+
+func (m *TreeMap[K, V]) Len() int {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return m.tree.Len()
 }
