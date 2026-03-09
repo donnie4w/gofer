@@ -16,12 +16,7 @@ import (
 )
 
 // Get ：基础用法
-func Get(
-	ctx context.Context,
-	rawURL string,
-	header map[string]string,
-	cookies []*http.Cookie,
-) ([]byte, error) {
+func Get(ctx context.Context, rawURL string, header map[string]string, cookies []*http.Cookie) ([]byte, error) {
 	return GetWithQuery(ctx, rawURL, nil, header, cookies)
 }
 
