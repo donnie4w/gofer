@@ -1,8 +1,6 @@
 module github.com/donnie4w/gofer
 
-go 1.23.0
-
-toolchain go1.23.2
+go 1.25.0
 
 require (
 	github.com/apache/thrift v0.22.0
@@ -14,11 +12,13 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8
 	github.com/golang/snappy v1.0.0
 	github.com/google/btree v1.1.3
-	github.com/klauspost/compress v1.18.0
+	github.com/klauspost/compress v1.18.4
 	golang.org/x/crypto v0.40.0
-	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792
+	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
 	golang.org/x/image v0.30.0
 	golang.org/x/net v0.42.0
 	golang.org/x/sys v0.35.0
-	google.golang.org/protobuf v1.36.7
+	google.golang.org/protobuf v1.36.11
 )
+
+require github.com/golang/protobuf v1.5.4 // indirect
