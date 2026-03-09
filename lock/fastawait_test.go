@@ -13,7 +13,7 @@ func TestFastAwait(t *testing.T) {
 			time.Sleep(1 * time.Second)
 			aw.CloseAndPut(idx, int(idx))
 		}(idx)
-		v, err := aw.Wait(idx, time.Second)
+		v, err := aw.Wait(idx, 2*time.Second)
 		t.Log(err, idx, v)
 	}
 	time.Sleep(3 * time.Second)
