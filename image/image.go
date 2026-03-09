@@ -19,6 +19,7 @@ import (
 	"image/png"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
@@ -427,31 +428,110 @@ func (t *Image) Resize(srcData []byte, width, height int, mode Mode) (destData [
 	return t.Encode(srcData, width, height, mode, nil)
 }
 
-func imageType(srcData []byte) (s string) {
-	if len(srcData) < 8 {
-		return
+func imageType(data []byte) string {
+	l := len(data)
+	if l == 0 {
+		return ""
 	}
-	switch {
-	case bytes.Equal(srcData[:8], []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}):
+
+	// ---------- Binary magic first ----------
+
+	// PNG
+	if l >= 8 && bytes.Equal(data[:8], []byte{
+		0x89, 0x50, 0x4E, 0x47,
+		0x0D, 0x0A, 0x1A, 0x0A,
+	}) {
 		return "png"
-	case bytes.Equal(srcData[:2], []byte{0x42, 0x4D}):
-		return "bmp"
-	case bytes.Equal(srcData[:2], []byte{0xFF, 0xD8}):
-		return "jpeg"
-	case bytes.Equal(srcData[:6], []byte{0x47, 0x49, 0x46, 0x38, 0x39, 0x61}) || bytes.Equal(srcData[:6], []byte{0x47, 0x49, 0x46, 0x38, 0x37, 0x61}):
-		return "gif"
-	case bytes.Equal(srcData[:4], []byte{0x49, 0x49, 0x2A, 0x00}) || bytes.Equal(srcData[:4], []byte{0x4D, 0x4D, 0x00, 0x2A}):
-		return "tiff"
-	case bytes.Equal(srcData[:4], []byte{0x52, 0x49, 0x46, 0x46}):
-		return "webp"
-	case bytes.Equal(srcData[:4], []byte{0x38, 0x42, 0x50, 0x53}):
-		return "psd"
-	case bytes.Equal(srcData[:4], []byte{0x00, 0x00, 0x01, 0x00}):
-		return "ico"
-	case bytes.Equal(srcData[:8], []byte{0x00, 0x00, 0x00, 0x0C, 0x61, 0x76, 0x69, 0x66}):
-		return "avif"
 	}
-	return
+
+	// JPEG
+	if l >= 2 && data[0] == 0xFF && data[1] == 0xD8 {
+		return "jpeg"
+	}
+
+	// GIF
+	if l >= 6 && (bytes.Equal(data[:6], []byte("GIF89a")) ||
+		bytes.Equal(data[:6], []byte("GIF87a"))) {
+		return "gif"
+	}
+
+	// BMP
+	if l >= 2 && bytes.Equal(data[:2], []byte("BM")) {
+		return "bmp"
+	}
+
+	// TIFF
+	if l >= 4 && (bytes.Equal(data[:4], []byte{0x49, 0x49, 0x2A, 0x00}) ||
+		bytes.Equal(data[:4], []byte{0x4D, 0x4D, 0x00, 0x2A})) {
+		return "tiff"
+	}
+
+	// WEBP: RIFF + WEBP
+	if l >= 12 &&
+		bytes.Equal(data[:4], []byte("RIFF")) &&
+		bytes.Equal(data[8:12], []byte("WEBP")) {
+		return "webp"
+	}
+
+	// ICO
+	if l >= 4 && (bytes.Equal(data[:4], []byte{0x00, 0x00, 0x01, 0x00}) ||
+		bytes.Equal(data[:4], []byte{0x00, 0x00, 0x02, 0x00})) {
+		return "ico"
+	}
+
+	// PSD
+	if l >= 4 && bytes.Equal(data[:4], []byte("8BPS")) {
+		return "psd"
+	}
+
+	// ---------- ISO BMFF based images ----------
+
+	if l >= 12 && bytes.Equal(data[4:8], []byte("ftyp")) {
+		brand := string(data[8:12])
+
+		switch brand {
+		case "avif", "avis":
+			return "avif"
+		case "heic", "heix", "hevc", "hevx":
+			return "heic"
+		case "jxl ":
+			return "jxl"
+		case "jp2 ":
+			return "jp2"
+		}
+	}
+
+	// ---------- JPEG XL codestream ----------
+	if l >= 2 && data[0] == 0xFF && data[1] == 0x0A {
+		return "jxl"
+	}
+
+	// ---------- TGA ----------
+	if l >= 18 {
+		imgType := data[2]
+		if imgType == 2 || imgType == 3 || imgType == 10 || imgType == 11 {
+			pixelDepth := data[16]
+			if pixelDepth == 8 || pixelDepth == 16 || pixelDepth == 24 || pixelDepth == 32 {
+				return "tga"
+			}
+		}
+	}
+
+	// ---------- SVG ----------
+	if l >= 5 {
+		n := l
+		if n > 256 {
+			n = 256
+		}
+		head := strings.TrimSpace(strings.ToLower(string(data[:n])))
+
+		if strings.HasPrefix(head, "<svg") ||
+			(strings.HasPrefix(head, "<?xml") && strings.Contains(head, "<svg")) {
+			return "svg"
+		}
+	}
+
+	return ""
 }
 
 func praseMode(mode Mode, w, h, preWidth, preHeight int) (nw, nh int, resizeType ResizeType) {
