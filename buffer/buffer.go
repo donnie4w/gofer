@@ -10,6 +10,7 @@ package buffer
 import (
 	"fmt"
 	"io"
+	"unsafe"
 
 	gobuffer "github.com/donnie4w/gofer/pool/buffer"
 )
@@ -40,34 +41,38 @@ func NewBufferBySlice(bs []byte) *Buffer {
 type Buffer []byte
 
 func (b *Buffer) Reset() {
-	*b = (*b)[:0]
+	if b != nil {
+		*b = (*b)[:0]
+	}
 }
 
 func (b *Buffer) Write(p []byte) (int, error) {
-	if b != nil {
-		*b = append(*b, p...)
-		return len(p), nil
-	} else {
+	if b == nil {
 		return 0, fmt.Errorf("Write: buffer is nil")
 	}
+	*b = append(*b, p...)
+	return len(p), nil
 }
 
 func (b *Buffer) WriteString(s string) (int, error) {
-	if b != nil {
-		*b = append(*b, s...)
-		return len(s), nil
-	} else {
+	if b == nil {
 		return 0, fmt.Errorf("WriteString: buffer is nil")
 	}
+	*b = append(*b, s...)
+	return len(s), nil
 }
 
 func (b *Buffer) WriteInt32(i int) (int, error) {
-	if b != nil {
-		*b = append(*b, int32ToBytes(int32(i))...)
-		return 8, nil
-	} else {
+	if b == nil {
 		return 0, fmt.Errorf("WriteInt32: buffer is nil")
 	}
+	*b = append(*b,
+		byte(i>>24),
+		byte(i>>16),
+		byte(i>>8),
+		byte(i),
+	)
+	return 4, nil
 }
 
 func (b *Buffer) WriteByte(c byte) error {
@@ -93,15 +98,18 @@ func (b *Buffer) Free() {
 }
 
 func (b *Buffer) Len() int {
-	return len([]byte(*b))
+	if b == nil {
+		return 0
+	}
+	return len(*b)
 }
 
 func (b *Buffer) Read(p []byte) (n int, err error) {
-	if b == nil {
-		if len(p) == 0 {
-			return 0, nil
-		}
+	if b == nil || len(*b) == 0 {
 		return 0, io.EOF
+	}
+	if len(p) == 0 {
+		return 0, nil
 	}
 	if n = copy(p, *b); n < b.Len() {
 		*b = (*b)[n:]
@@ -110,16 +118,9 @@ func (b *Buffer) Read(p []byte) (n int, err error) {
 }
 
 func (b *Buffer) String() string {
-	if b != nil {
-		return string(b.Bytes())
+	if b == nil || len(*b) == 0 {
+		return ""
 	}
-	return ""
-}
-
-func int32ToBytes(n int32) (bs []byte) {
-	bs = make([]byte, 4)
-	for i := 0; i < 4; i++ {
-		bs[i] = byte(n >> (8 * (3 - i)))
-	}
-	return
+	// 安全的零拷贝转换
+	return unsafe.String(unsafe.SliceData(*b), len(*b))
 }
