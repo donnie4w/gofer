@@ -1,6 +1,6 @@
 // Copyright (c) 2023, donnie <donnie4w@gmail.com>
 // All rights reserved.
-// Use of t source code is governed by a BSD-style
+// Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
 // github.com/donnie4w/gofer/hashmap
@@ -12,326 +12,172 @@ import (
 	"sync/atomic"
 )
 
-// MapL Define a generic synchronized map structure that also keeps track of its length.
-// It uses sync.Map as the underlying data structure and an int64 variable to count the number of elements.
-type MapL[K any, V any] struct {
+// MapL is a generic, thread-safe map with an atomic length counter.
+// Built on sync.Map (lock-free for most operations).
+// Supports nil values correctly (e.g. *T, []byte, map, etc.).
+type MapL[K comparable, V any] struct {
 	m   sync.Map
 	len int64
 }
 
-// NewMapL Create a new instance of a generic MapL and return its pointer.
-// The initial length is set to 0.
-func NewMapL[K any, V any]() *MapL[K, V] {
-	return &MapL[K, V]{m: sync.Map{}}
+// NewMapL creates a new MapL.
+func NewMapL[K comparable, V any]() *MapL[K, V] {
+	return &MapL[K, V]{}
 }
 
-func (t *MapL[K, V]) Put(key K, value V) (prev V, b bool) {
-	if v, ok := t.m.Swap(key, value); !ok {
+// Put stores or updates the value for key.
+// Returns the previous value and whether it existed.
+// Correctly handles nil values (typed nil is preserved).
+func (t *MapL[K, V]) Put(key K, value V) (prev V, existed bool) {
+	if old, loaded := t.m.Swap(key, value); loaded {
+		existed = true
+		prev = old.(V)
+	} else {
 		atomic.AddInt64(&t.len, 1)
-	} else if v != nil {
-		prev, b = v.(V), true
 	}
 	return
 }
 
-func (t *MapL[K, V]) Get(key K) (_r V, b bool) {
-	if v, ok := t.m.Load(key); ok {
-		if v != nil {
-			_r = v.(V)
-		}
-		b = true
+// Get returns the value for key and whether it exists.
+// Correctly returns typed nil when the stored value is nil.
+func (t *MapL[K, V]) Get(key K) (v V, ok bool) {
+	if e, loaded := t.m.Load(key); loaded {
+		v = e.(V)
+		ok = true
 	}
 	return
 }
 
-func (t *MapL[K, V]) Has(key K) (ok bool) {
-	_, ok = t.m.Load(key)
+// GetOrInsert retrieves the value associated with the specified key. If the key does not exist, it inserts the given value and returns that value.
+// Return value: The value corresponding to the key, along with a flag indicating whether the value was newly inserted (false indicates it already existed, true indicates it was newly inserted).
+func (t *MapL[K, V]) GetOrInsert(key K, value V) (v V, inserted bool) {
+	if e, loaded := t.m.Load(key); loaded {
+		v = e.(V)
+		inserted = false
+		return
+	}
+
+	if e, loaded := t.m.LoadOrStore(key, value); loaded {
+		v = e.(V)
+		inserted = false
+	} else {
+		v = value
+		inserted = true
+		atomic.AddInt64(&t.len, 1) // 维护长度计数器
+	}
 	return
 }
 
-func (t *MapL[K, V]) Del(key K) (ok bool) {
-	if _, ok = t.m.LoadAndDelete(key); ok {
+// Has reports whether key exists.
+func (t *MapL[K, V]) Has(key K) bool {
+	_, ok := t.m.Load(key)
+	return ok
+}
+
+// Del deletes the key and returns whether it existed.
+func (t *MapL[K, V]) Del(key K) (existed bool) {
+	if _, ok := t.m.LoadAndDelete(key); ok {
 		atomic.AddInt64(&t.len, -1)
+		existed = true
 	}
 	return
 }
 
-// Range  Iterate over all elements in the MapL.
-// For each element, call the provided function with the key and value.
-// The iteration stops if the function returns false.
+// Range calls f sequentially for each key/value pair.
+// If f returns false, iteration stops.
+// Correctly passes nil values to f.
 func (t *MapL[K, V]) Range(f func(k K, v V) bool) {
 	t.m.Range(func(k, v any) bool {
-		if v != nil {
-			return f(k.(K), v.(V))
-		} else {
-			var t V
-			return f(k.(K), t)
-		}
+		return f(k.(K), v.(V))
 	})
 }
 
+// Len returns the number of elements (approximate under high contention).
 func (t *MapL[K, V]) Len() int64 {
-	return t.len
+	return atomic.LoadInt64(&t.len)
 }
 
-// Map  Define a generic synchronized map structure using sync.Map as the underlying data structure.
-type Map[K any, V any] struct {
+// Clear removes all entries and resets length to 0.
+func (t *MapL[K, V]) Clear() {
+	t.m.Range(func(key, _ any) bool {
+		t.m.Delete(key)
+		return true
+	})
+	atomic.StoreInt64(&t.len, 0)
+}
+
+// Map is a generic, thread-safe map without length tracking.
+// Maximum performance version.
+type Map[K comparable, V any] struct {
 	m sync.Map
 }
 
-// NewMap Create a new instance of a generic Map and return its pointer.
-func NewMap[K any, V any]() *Map[K, V] {
-	return &Map[K, V]{m: sync.Map{}}
+// NewMap creates a new Map.
+func NewMap[K comparable, V any]() *Map[K, V] {
+	return &Map[K, V]{}
 }
 
-func (t *Map[K, V]) Put(key K, value V) (prev V, b bool) {
-	if v, ok := t.m.Swap(key, value); ok && v != nil {
-		prev, b = v.(V), true
+// Put stores or updates the value for key.
+// Returns the previous value and whether it existed.
+func (t *Map[K, V]) Put(key K, value V) (prev V, existed bool) {
+	if old, loaded := t.m.Swap(key, value); loaded {
+		existed = true
+		prev = old.(V)
 	}
 	return
 }
 
-func (t *Map[K, V]) Get(key K) (v V, b bool) {
-	if e, ok := t.m.Load(key); ok {
-		if e != nil {
-			v = e.(V)
-		}
-		b = ok
+// Get returns the value for key and whether it exists.
+func (t *Map[K, V]) Get(key K) (v V, ok bool) {
+	if e, loaded := t.m.Load(key); loaded {
+		v = e.(V)
+		ok = true
 	}
 	return
 }
 
-func (t *Map[K, V]) Has(key K) (ok bool) {
-	_, ok = t.m.Load(key)
+// GetOrInsert retrieves the value associated with the specified key. If the key does not exist, it inserts the given value and returns that value.
+// Return value: The value corresponding to the key, along with a flag indicating whether the value was newly inserted (false indicates it already existed, true indicates it was newly inserted).
+func (t *Map[K, V]) GetOrInsert(key K, value V) (v V, inserted bool) {
+	if e, loaded := t.m.Load(key); loaded {
+		v = e.(V)
+		inserted = false
+		return
+	}
+
+	if e, loaded := t.m.LoadOrStore(key, value); loaded {
+		v = e.(V)
+		inserted = false
+	} else {
+		v = value
+		inserted = true
+	}
 	return
 }
 
-func (t *Map[K, V]) Del(key K) (ok bool) {
-	_, ok = t.m.LoadAndDelete(key)
-	return
+// Has reports whether key exists.
+func (t *Map[K, V]) Has(key K) bool {
+	_, ok := t.m.Load(key)
+	return ok
 }
 
-// Range  Iterate over all elements in the Map.
-// For each element, call the provided function with the key and value.
-// The iteration stops if the function returns false.
+// Del deletes the key and returns whether it existed.
+func (t *Map[K, V]) Del(key K) bool {
+	_, ok := t.m.LoadAndDelete(key)
+	return ok
+}
+
+// Range calls f sequentially for each key/value pair.
 func (t *Map[K, V]) Range(f func(k K, v V) bool) {
 	t.m.Range(func(k, v any) bool {
-		if v != nil {
-			return f(k.(K), v.(V))
-		} else {
-			var t V
-			return f(k.(K), t)
-		}
+		return f(k.(K), v.(V))
 	})
 }
 
-/***********************************************************/
-//
-//// SortMap the big numbers come front
-//type SortMap[K int | int64 | int8 | int32 | string, V any] struct {
-//	l   *list.List
-//	m   *Map[K, V]
-//	mux *sync.RWMutex
-//}
-//
-//func NewSortMap[K int | int64 | int8 | int32 | string, V any]() *SortMap[K, V] {
-//	return &SortMap[K, V]{l: list.New(), m: NewMap[K, V](), mux: &sync.RWMutex{}}
-//}
-//
-//func (t *SortMap[K, V]) Put(key K, value V) {
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	t.m.Put(key, value)
-//	t.l.PushFront(key)
-//	t._swap(t.l.Front())
-//}
-//
-//func (t *SortMap[K, V]) Get(key K) (v V, ok bool) {
-//	v, ok = t.m.Get(key)
-//	return
-//}
-//
-//func (t *SortMap[K, V]) GetFrontKey() (k K, ok bool) {
-//	defer t.mux.RUnlock()
-//	t.mux.RLock()
-//	if e := t.l.Front(); e != nil {
-//		if e.Value != nil {
-//			k, ok = e.Value.(K), true
-//		} else {
-//			ok = true
-//		}
-//	}
-//	return
-//}
-//
-//func (t *SortMap[K, V]) FrontForEach(f func(k K, v V) bool) {
-//	defer t.mux.RUnlock()
-//	t.mux.RLock()
-//	for e := t.l.Front(); e != nil; e = e.Next() {
-//		if e.Value != nil {
-//			k := e.Value.(K)
-//			if v, ok := t.m.Get(k); !ok || !f(k, v) {
-//				break
-//			}
-//		}
-//	}
-//}
-//
-//func (t *SortMap[K, V]) BackForEach(f func(k K, v V) bool) {
-//	defer t.mux.RUnlock()
-//	t.mux.RLock()
-//	for e := t.l.Back(); e != nil; e = e.Prev() {
-//		if e.Value != nil {
-//			k := e.Value.(K)
-//			if v, ok := t.m.Get(k); !ok || !f(k, v) {
-//				break
-//			}
-//		}
-//	}
-//}
-//
-//func (t *SortMap[K, V]) _swap(e *list.Element) {
-//	if e != nil && e.Next() != nil && e.Value.(K) < e.Next().Value.(K) {
-//		t.l.MoveAfter(e, e.Next())
-//		t._swap(e)
-//	}
-//}
-//
-//func (t *SortMap[K, V]) DelAndLoadBack() (k K, v V) {
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	if e := t.l.Back(); e != nil {
-//		t.l.Remove(e)
-//		if e.Value != nil {
-//			k = e.Value.(K)
-//			v, _ = t.m.Get(k)
-//			t.m.Del(k)
-//		}
-//	}
-//	return
-//}
-//
-//func (t *SortMap[K, V]) len() int {
-//	return t.l.len()
-//}
-
-/************************************************************/
-
-// LinkedMap
-// Deprecated
-// Use LinkedHashMap instead.
-//type LinkedMap[K, V any] struct {
-//	l   *list.List
-//	m   *Map[K, *list.Element]
-//	mux *sync.Mutex
-//}
-
-//// NewLinkedMap
-//// Deprecated
-//// Use NewLinkedHashMap instead.
-//func NewLinkedMap[K, V any]() *LinkedMap[K, V] {
-//	return &LinkedMap[K, V]{list.New(), NewMap[K, *list.Element](), &sync.Mutex{}}
-//}
-//
-//func (t *LinkedMap[K, V]) Put(k K, v V) {
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	if e, ok := t.m.Swap(k, t.l.PushFront([]any{k, v})); ok {
-//		t.l.Remove(e)
-//	}
-//}
-//
-//func (t *LinkedMap[K, V]) Get(key K) (v V, ok bool) {
-//	defer recover()
-//	if e, ok := t.m.Get(key); ok {
-//		return e.Value.([]any)[1].(V), ok
-//	}
-//	return
-//}
-//
-//func (t *LinkedMap[K, V]) Has(key K) (ok bool) {
-//	return t.m.Has(key)
-//}
-//
-//func (t *LinkedMap[K, V]) len() int {
-//	return t.l.len()
-//}
-//
-//func (t *LinkedMap[K, V]) Del(key K) (ok bool) {
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	if e, ok := t.m.Get(key); ok {
-//		t.l.Remove(e)
-//		t.m.Del(key)
-//		return ok
-//	}
-//	return
-//}
-//
-//func (t *LinkedMap[K, V]) Prev(key K) (k K, v V, _ok bool) {
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	if e, ok := t.m.Get(key); ok {
-//		if _v := e.Prev(); _v != nil && _v.Value != nil {
-//			k, v = _v.Value.([]any)[0].(K), _v.Value.([]any)[1].(V)
-//		}
-//		_ok = true
-//	} else {
-//		_ok = false
-//	}
-//	return
-//}
-//
-//func (t *LinkedMap[K, V]) Next(key K) (k K, v V) {
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	if e, ok := t.m.Get(key); ok {
-//		if _v := e.Next(); _v != nil && _v.Value != nil {
-//			k, v = _v.Value.([]any)[0].(K), _v.Value.([]any)[1].(V)
-//		}
-//	}
-//	return
-//}
-//
-//func (t *LinkedMap[K, V]) Back() (k K) {
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	if e := t.l.Back(); e != nil && e.Value != nil {
-//		k = e.Value.([]any)[0].(K)
-//	}
-//	return
-//}
-//
-//func (t *LinkedMap[K, V]) Front() (k K) {
-//	defer recover()
-//	defer t.mux.Unlock()
-//	t.mux.Lock()
-//	if e := t.l.Front(); e != nil && e.Value != nil {
-//		k = e.Value.([]any)[0].(K)
-//	}
-//	return
-//}
-//
-//func (t *LinkedMap[K, V]) BackForEach(f func(k K, v V) bool) {
-//	defer recover()
-//	for e := t.l.Back(); e != nil; e = e.Prev() {
-//		if e.Value != nil {
-//			es := e.Value.([]any)
-//			if !f(es[0].(K), es[1].(V)) {
-//				break
-//			}
-//		}
-//	}
-//}
-//
-//func (t *LinkedMap[K, V]) FrontForEach(f func(k K, v V) bool) {
-//	defer recover()
-//	for e := t.l.Front(); e != nil; e = e.Next() {
-//		if e.Value != nil {
-//			es := e.Value.([]any)
-//			if !f(es[0].(K), es[1].(V)) {
-//				break
-//			}
-//		}
-//	}
-//}
+// Clear removes all entries.
+func (t *Map[K, V]) Clear() {
+	t.m.Range(func(key, _ any) bool {
+		t.m.Delete(key)
+		return true
+	})
+}
