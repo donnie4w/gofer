@@ -13,83 +13,77 @@ import (
 )
 
 func Int64ToBytes(n int64) []byte {
-	var bs [8]byte
-	for i := 0; i < 8; i++ {
-		bs[i] = byte(n >> (8 * (7 - i)))
-	}
-	return bs[:]
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(n))
+	return b
 }
 
 func BytesToInt64(bs []byte) (_r int64) {
-	if len(bs) >= 8 {
-		for i := 0; i < 8; i++ {
-			_r = _r | int64(bs[i])<<(8*(7-i))
-		}
-	} else {
-		var bs8 [8]byte
-		for i, b := range bs {
-			bs8[i+8-len(bs)] = b
-		}
-		_r = BytesToInt64(bs8[:])
+	if len(bs) == 0 {
+		return
 	}
-	return
+
+	b := make([]byte, 8)
+	copy(b[8-len(bs):], bs[:min(len(bs), 8)])
+	return int64(binary.BigEndian.Uint64(b))
 }
 
 func Int32ToBytes(n int32) []byte {
-	var bs [4]byte
-	for i := 0; i < 4; i++ {
-		bs[i] = byte(n >> (8 * (3 - i)))
-	}
-	return bs[:]
-}
-
-func Int16ToBytes(n int16) []byte {
-	var bs [2]byte
-	for i := 0; i < 2; i++ {
-		bs[i] = byte(n >> (8 * (1 - i)))
-	}
-	return bs[:]
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, uint32(n))
+	return b
 }
 
 func BytesToInt32(bs []byte) (_r int32) {
-	if len(bs) >= 4 {
-		for i := 0; i < 4; i++ {
-			_r = _r | int32(bs[i])<<(8*(3-i))
-		}
-	} else {
-		bs4 := make([]byte, 4)
-		for i, b := range bs {
-			bs4[i+4-len(bs)] = b
-		}
-		_r = BytesToInt32(bs4)
+	if len(bs) == 0 {
+		return
 	}
-	return
+
+	b := make([]byte, 4)
+	copy(b[4-len(bs):], bs[:min(len(bs), 4)])
+	return int32(binary.BigEndian.Uint32(b))
+}
+
+func Int16ToBytes(n int16) []byte {
+	b := make([]byte, 2)
+	binary.BigEndian.PutUint16(b, uint16(n))
+	return b
 }
 
 func BytesToInt16(bs []byte) (_r int16) {
-	if len(bs) >= 2 {
-		for i := 0; i < 2; i++ {
-			_r = _r | int16(bs[i])<<(8*(1-i))
-		}
-	} else {
-		var bs2 [2]byte
-		for i, b := range bs {
-			bs2[i+2-len(bs)] = b
-		}
-		_r = BytesToInt16(bs2[:])
+	if len(bs) == 0 {
+		return 0
 	}
-	return
+
+	b := make([]byte, 2)
+	copy(b[2-len(bs):], bs[:min(len(bs), 2)])
+	return int16(binary.BigEndian.Uint16(b))
 }
 
 func IntArrayToBytes(n []int64) []byte {
-	bytesBuffer := bytes.NewBuffer([]byte{})
-	binary.Write(bytesBuffer, binary.BigEndian, n)
-	return bytesBuffer.Bytes()
+	if len(n) == 0 {
+		return nil
+	}
+
+	buf := bytes.NewBuffer(make([]byte, 0, len(n)*8)) // 预分配容量，减少扩容
+	if err := binary.Write(buf, binary.BigEndian, n); err != nil {
+		return nil
+	}
+	return buf.Bytes()
 }
 
 func BytesToIntArray(bs []byte) (data []int64) {
-	bytesBuffer := bytes.NewBuffer(bs)
+	if len(bs) == 0 {
+		return nil
+	}
+	if len(bs)%8 != 0 {
+		return nil
+	}
+
 	data = make([]int64, len(bs)/8)
-	binary.Read(bytesBuffer, binary.BigEndian, data)
+	buf := bytes.NewBuffer(bs)
+	if err := binary.Read(buf, binary.BigEndian, &data); err != nil {
+		return nil
+	}
 	return
 }
