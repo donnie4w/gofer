@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 )
 
-const hashSegments = 1 << 6
+const hashSegments = 1 << 8
 
 var hashSeed = maphash.MakeSeed()
 
