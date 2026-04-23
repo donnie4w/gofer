@@ -10,7 +10,7 @@ import (
 
 func TestAwait_WaitAndCloseAndPut(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
@@ -30,7 +30,7 @@ func TestAwait_WaitAndCloseAndPut(t *testing.T) {
 
 func TestAwait_CloseAndPutBeforeWait(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	go func() {
 		_ = at.CloseAndPut(2, 200)
@@ -51,7 +51,7 @@ func TestAwait_CloseAndPutBeforeWait(t *testing.T) {
 
 func TestAwait_Timeout(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	start := time.Now()
 
@@ -68,7 +68,7 @@ func TestAwait_Timeout(t *testing.T) {
 
 func TestAwait_Cancel(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -90,7 +90,7 @@ func TestAwait_Cancel(t *testing.T) {
 
 func TestAwait_Close(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	go func() {
 		time.Sleep(20 * time.Millisecond)
@@ -106,7 +106,7 @@ func TestAwait_Close(t *testing.T) {
 
 func TestAwait_Has(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	if at.Has(6) {
 		t.Fatal("should not exist")
@@ -125,7 +125,7 @@ func TestAwait_Has(t *testing.T) {
 
 func TestAwait_SyncWait(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -150,7 +150,7 @@ func TestAwait_SyncWait(t *testing.T) {
 
 func TestAwait_ConcurrentRPC(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	const n = 10000
 
@@ -186,7 +186,7 @@ func TestAwait_ConcurrentRPC(t *testing.T) {
 
 func TestAwait_HighConcurrency(t *testing.T) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	const n = 50000
 
@@ -225,7 +225,7 @@ func TestAwait_HighConcurrency(t *testing.T) {
 
 func BenchmarkAwait_RoundTrip(b *testing.B) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	b.ResetTimer()
 
@@ -243,7 +243,7 @@ func BenchmarkAwait_RoundTrip(b *testing.B) {
 
 func BenchmarkAwait_Parallel(b *testing.B) {
 
-	at := NewAwait[int](64)
+	at := NewAwait[int]()
 
 	b.RunParallel(func(pb *testing.PB) {
 
