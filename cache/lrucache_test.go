@@ -12,23 +12,13 @@ import (
 
 func BenchmarkParallelLru(b *testing.B) {
 	lc := NewLruCache[int64](1 << 20)
-
-	for i := 0; i < 1<<18; i++ {
-		k := int64(i)
-		lc.Add(k, time.Now().UnixNano())
-	}
-
 	b.ResetTimer()
 	i := 0
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			i++
 			k := int64(i)
-			//lc.add(k, time.Now().UnixNano())
-			//if k%5 == 0 {
-			//	lc.Remove(k)
-			//}
-			lc.Get(k)
+			lc.Add(k, k)
 		}
 	})
 }
@@ -42,11 +32,6 @@ func BenchmarkSerialLru(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		k := int64(i)
-		//lc.add(k, time.Now().UnixNano())
-		//if k%5 == 0 {
-		//	lc.Remove(k)
-		//}
-		lc.Get(k)
+		lc.Get(int64(i))
 	}
 }
