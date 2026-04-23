@@ -153,16 +153,16 @@ func TestLimitFifoMap_Concurrent(t *testing.T) {
 
 // BenchmarkLimitFifoMap_Put 测试Put性能
 func BenchmarkLimitFifoMap_Put(b *testing.B) {
-	fifo := NewLimitFifoMap[string, int](100000)
-	keys := make([]string, b.N)
+	fifo := NewLimitFifoMap[string, int](benchSize)
+	keys := make([]string, benchSize)
 	// 预生成key，避免基准测试中生成key的性能干扰
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < benchSize; i++ {
 		keys[i] = fmt.Sprintf("key_%d", i)
 	}
 
 	b.ResetTimer() // 重置计时器，排除预生成key的耗时
 	for i := 0; i < b.N; i++ {
-		fifo.Put(keys[i], i)
+		fifo.Put(keys[i%benchSize], i)
 	}
 }
 
