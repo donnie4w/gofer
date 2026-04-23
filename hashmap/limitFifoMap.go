@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 )
 
-const fifoSegments = 1 << 6
+const fifoSegments = 1 << 8
 
 // fifoSeed is a global, read-only seed used for maphash.
 // It is initialized once at package load time and is safe for concurrent use across all goroutines.
