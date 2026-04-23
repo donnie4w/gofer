@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 )
 
-const defaultSegments = 1 << 6
+const defaultSegments = 1 << 8
 
 var lruSeed = maphash.MakeSeed()
 
@@ -23,6 +23,7 @@ type entryLru[K comparable, V any] struct {
 	prev, next *entryLru[K, V]
 	key        K
 	value      V
+	hits       int32 // atomic counter for sampled promotion
 }
 
 type segmentLru[K comparable, V any] struct {
@@ -82,36 +83,43 @@ func (s *segmentLru[K, V]) evict() {
 	atomic.AddInt32(&s.length, -1)
 }
 
+// LRUMode defines the strategy for updating access order in the cache.
+type LRUMode int
+
+const (
+	// ModePerfFirst Performance first: sampled update order (default).
+	// Moves an entry to the head only every GetsPerPromote Get operations.
+	ModePerfFirst LRUMode = iota
+	// ModeStrictLRU Strict LRU: moves an entry to the head on every successful Get.
+	// More accurate but incurs more write locks.
+	ModeStrictLRU
+)
+
 // LimitLruMap is a thread-safe, fixed-capacity LRU map.
-// It uses sharded locking (multiple segments) for high concurrency.
-// Key collisions are handled correctly by Go's native map[K].
-// For string keys, maphash (concurrent-safe) is used for segment selection.
-//
-// By default Safe=false (fast path): Get does NOT promote on read (LRU updated only on Put).
-// Call SetSafe() to enable strict LRU promotion on every Get (more correct but slightly slower).
+// It uses segmented locking (multiple segments) to support high concurrency.
+// By default, it uses performance-first mode (sampled promotion).
+// Switch to strict LRU by using WithMode(ModeStrictLRU).
 type LimitLruMap[K comparable, V any] struct {
-	segmentLrus []*segmentLru[K, V]
-	mask        uint64
-	hashFunc    func(K) uint64
-	Safe        bool
+	segmentLrus    []*segmentLru[K, V]
+	mask           uint64
+	hashFunc       func(K) uint64
+	mode           LRUMode
+	getsPerPromote int32 // Only effective in ModePerfFirst, default is 16
 }
 
-// NewLimitLruMap creates a new LimitLruMap with the given total capacity.
-// capacity should be >= 64 and a power of 2 for best performance (internal segments will be evenly distributed).
+// NewLimitLruMap creates a new LimitLruMap with total capacity.
+// It is recommended that capacity >= 64 and is a power of 2.
 func NewLimitLruMap[K comparable, V any](capacity int) *LimitLruMap[K, V] {
 	return NewLimitLruMapWithSegment[K, V](capacity, defaultSegments)
 }
 
-// NewLimitLruMapWithSegment creates a new LimitLruMap with custom segment count.
-// capacity should be >= segmentLruNumber and a power of 2.
-// segmentLruNumber must be a power of 2 (enforced).
+// NewLimitLruMapWithSegment creates a LimitLruMap with a custom number of segments.
 func NewLimitLruMapWithSegment[K comparable, V any](capacity, segmentLruNumber int) *LimitLruMap[K, V] {
 	if segmentLruNumber <= 0 || (segmentLruNumber&(segmentLruNumber-1)) != 0 {
 		panic("segmentLruNumber must be positive power of 2")
 	}
 
 	segmentLrus := make([]*segmentLru[K, V], segmentLruNumber)
-	// Each segment gets roughly equal capacity (total capacity is guaranteed)
 	segCap := (capacity + segmentLruNumber - 1) / segmentLruNumber
 	if segCap < 1 {
 		segCap = 1
@@ -126,14 +134,29 @@ func NewLimitLruMapWithSegment[K comparable, V any](capacity, segmentLruNumber i
 	}
 
 	return &LimitLruMap[K, V]{
-		segmentLrus: segmentLrus,
-		mask:        uint64(segmentLruNumber - 1),
-		hashFunc:    generateLruHashFunc[K](),
+		segmentLrus:    segmentLrus,
+		mask:           uint64(segmentLruNumber - 1),
+		hashFunc:       generateLruHashFunc[K](),
+		mode:           ModePerfFirst, // Default: performance first
+		getsPerPromote: 16,            // Default: try promotion every 16 Gets
 	}
 }
 
-// generateLruHashFunc returns a fast hash function used ONLY for selecting which segment to use.
-// For string it uses maphash (concurrent-safe, low collision). Other types use direct cast for speed.
+// WithMode sets the LRU update mode (for method chaining).
+func (c *LimitLruMap[K, V]) WithMode(mode LRUMode) *LimitLruMap[K, V] {
+	c.mode = mode
+	return c
+}
+
+// WithGetsPerPromote sets the sampling frequency (only effective in ModePerfFirst, recommended range: 4~64).
+func (c *LimitLruMap[K, V]) WithGetsPerPromote(n int) *LimitLruMap[K, V] {
+	if n < 1 {
+		n = 1
+	}
+	c.getsPerPromote = int32(n)
+	return c
+}
+
 func generateLruHashFunc[K comparable]() func(K) uint64 {
 	var k K
 	switch any(k).(type) {
@@ -172,64 +195,54 @@ func generateLruHashFunc[K comparable]() func(K) uint64 {
 	}
 }
 
-// getSegment returns the shard responsible for the given hash (used only for routing).
 func (c *LimitLruMap[K, V]) getSegment(hashed uint64) *segmentLru[K, V] {
 	return c.segmentLrus[hashed&c.mask]
 }
 
-// SetSafe enables strict LRU promotion on Get (move-to-front even on reads).
-// Default (Safe=false) is faster and suitable for most scenarios (promotion only happens on Put).
-// Returns the map itself for chaining.
-func (c *LimitLruMap[K, V]) SetSafe() *LimitLruMap[K, V] {
-	c.Safe = true
-	return c
-}
-
-// Get returns the value for key and whether it exists.
-// It is safe for concurrent use.
-//
-// Behavior depends on Safe flag:
-//   - Safe=false (default): fast read-only path, NO move-to-front on Get.
-//   - Safe=true: promotes entry to front on every successful Get (strict LRU).
+// Get returns the value for a given key and whether it exists.
+// Updates the LRU order based on the configured Mode.
 func (c *LimitLruMap[K, V]) Get(key K) (V, bool) {
 	var zero V
 	hash := c.hashFunc(key)
 	seg := c.getSegment(hash)
 
-	if !c.Safe {
-		// Fast path: no LRU promotion (most common use case)
-		seg.mu.RLock()
-		defer seg.mu.RUnlock()
-		if e, ok := seg.cache[key]; ok {
-			return e.value, true
-		}
-		return zero, false
-	}
-
-	// Safe path: double-check + upgrade to write lock to perform moveToFront
 	seg.mu.RLock()
-	_, ok := seg.cache[key]
+	e, ok := seg.cache[key]
 	if !ok {
 		seg.mu.RUnlock()
 		return zero, false
 	}
-	seg.mu.RUnlock()
 
-	seg.mu.Lock()
-	defer seg.mu.Unlock()
+	if c.mode == ModePerfFirst {
+		hits := atomic.AddInt32(&e.hits, 1)
+		shouldPromote := c.getsPerPromote > 0 && (hits%c.getsPerPromote == 0)
+		seg.mu.RUnlock()
 
-	if e, ok := seg.cache[key]; ok {
-		seg.moveToFront(e)
-		return e.value, true
+		if shouldPromote {
+			seg.mu.Lock()
+			if e2, stillOk := seg.cache[key]; stillOk && e2 == e {
+				seg.moveToFront(e)
+				atomic.StoreInt32(&e.hits, 0)
+			}
+			seg.mu.Unlock()
+		}
+	} else {
+		// ModeStrictLRU: attempt to move to front on every access
+		seg.mu.RUnlock()
+
+		seg.mu.Lock()
+		if e2, stillOk := seg.cache[key]; stillOk && e2 == e {
+			seg.moveToFront(e)
+		}
+		seg.mu.Unlock()
 	}
-	return zero, false
+
+	return e.value, true
 }
 
-// Put inserts or updates the value for key and moves it to the front (most recently used).
-// If the key already exists, the old value is returned.
-// If capacity is full, the least recently used entry is evicted.
-// Returns (oldValue, existed).
-func (c *LimitLruMap[K, V]) Put(key K, value V) (V, bool) {
+// Put inserts or updates a key-value pair and moves it to the head.
+// If capacity is exceeded, evicts the least recently used element.
+func (c *LimitLruMap[K, V]) Put(key K, value V) (old V, existed bool) {
 	var zero V
 	hash := c.hashFunc(key)
 	seg := c.getSegment(hash)
@@ -238,7 +251,7 @@ func (c *LimitLruMap[K, V]) Put(key K, value V) (V, bool) {
 	defer seg.mu.Unlock()
 
 	if e, ok := seg.cache[key]; ok {
-		old := e.value
+		old = e.value
 		e.value = value
 		seg.moveToFront(e)
 		return old, true
@@ -251,6 +264,7 @@ func (c *LimitLruMap[K, V]) Put(key K, value V) (V, bool) {
 	e := &entryLru[K, V]{
 		key:   key,
 		value: value,
+		// hits defaults to 0
 	}
 	seg.insertFront(e)
 	seg.cache[key] = e
@@ -259,8 +273,7 @@ func (c *LimitLruMap[K, V]) Put(key K, value V) (V, bool) {
 	return zero, false
 }
 
-// Del removes the key if it exists.
-// It is safe for concurrent use.
+// Del deletes a key if it exists.
 func (c *LimitLruMap[K, V]) Del(key K) {
 	hash := c.hashFunc(key)
 	seg := c.getSegment(hash)
@@ -275,8 +288,7 @@ func (c *LimitLruMap[K, V]) Del(key K) {
 	}
 }
 
-// Len returns the total number of entries (sum across all segments).
-// It is safe for concurrent use and uses atomic reads.
+// Len returns the approximate total number of elements currently in the map.
 func (c *LimitLruMap[K, V]) Len() int {
 	total := 0
 	for _, seg := range c.segmentLrus {
@@ -285,8 +297,7 @@ func (c *LimitLruMap[K, V]) Len() int {
 	return total
 }
 
-// Clear removes all entries.
-// It locks each segment sequentially (brief inconsistency is acceptable for Clear).
+// Clear removes all entries from the map.
 func (c *LimitLruMap[K, V]) Clear() {
 	for _, seg := range c.segmentLrus {
 		seg.mu.Lock()
@@ -298,8 +309,7 @@ func (c *LimitLruMap[K, V]) Clear() {
 	}
 }
 
-// Contains reports whether key exists.
-// It is safe for concurrent use (no LRU promotion).
+// Contains checks if a key exists without updating the LRU order.
 func (c *LimitLruMap[K, V]) Contains(key K) bool {
 	hash := c.hashFunc(key)
 	seg := c.getSegment(hash)
@@ -307,16 +317,13 @@ func (c *LimitLruMap[K, V]) Contains(key K) bool {
 	seg.mu.RLock()
 	_, ok := seg.cache[key]
 	seg.mu.RUnlock()
-
 	return ok
 }
 
-// Range calls f for each key/value pair from most recently used to least recently used.
-// If f returns false, iteration stops.
-// It takes a snapshot per segment to minimize lock hold time.
+// Range iterates over all entries from most recently used to least recently used.
+// Note: Each segment is snapshotted independently during iteration.
 func (c *LimitLruMap[K, V]) Range(f func(key K, value V) bool) {
 	for _, seg := range c.segmentLrus {
-		// Take a snapshot under read lock to avoid holding the lock during callback
 		seg.mu.RLock()
 		if atomic.LoadInt32(&seg.length) == 0 {
 			seg.mu.RUnlock()
