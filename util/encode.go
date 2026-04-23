@@ -170,11 +170,11 @@ func UUID32() uint32 {
 }
 
 func IsFileExist(path string) (_r bool) {
-	if path != "" {
-		_, err := os.Stat(path)
-		_r = err == nil || os.IsExist(err)
+	if path == "" {
+		return false
 	}
-	return
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
 }
 
 func ReadFile(path string) ([]byte, error) {
