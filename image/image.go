@@ -46,20 +46,21 @@ const (
 	Mode5
 )
 
+// Options holds configuration for image processing operations
 type Options struct {
-	Gray       bool
-	Invert     bool
-	Format     string
-	Rotate     int
-	FlipH      bool
-	FlipV      bool
-	Colors     int
-	Quality    int
-	CropAnchor []int
-	CropSide   []int
-	Blur       float64
-	ScaleUpper []int //Scale to maximum mode
-	ScaleLower []int //Scale to minimal mode
+	Gray       bool    // Convert to grayscale
+	Invert     bool    // Invert colors
+	Format     string  // Target format (jpg, png, gif, etc.)
+	Rotate     int     // Rotation angle in degrees
+	FlipH      bool    // Flip horizontally
+	FlipV      bool    // Flip vertically
+	Colors     int     // Not currently used
+	Quality    int     // Compression quality (1-10)
+	CropAnchor []int   // Crop by anchor [x, y, width, height]
+	CropSide   []int   // Crop by side [x, y, width, height]
+	Blur       float64 // Gaussian blur sigma
+	ScaleUpper []int   // Scale to maximum size with ratio
+	ScaleLower []int   // Scale to minimum size with ratio
 }
 
 type ResampleFilter int
@@ -111,10 +112,13 @@ const (
 	Cosine
 )
 
+// Image provides image processing capabilities with configurable resize filter
 type Image struct {
 	ResizeFilter ResampleFilter
 }
 
+// ResizeGIF resizes an animated GIF while attempting to preserve animation quality.
+// Note: GIF resizing often introduces noise due to 256-color limitation.
 func ResizeGIF(srcData []byte, targetWidth, targetHeight int) ([]byte, error) {
 	gifImg, err := gif.DecodeAll(bytes.NewReader(srcData))
 	if err != nil {
@@ -122,7 +126,7 @@ func ResizeGIF(srcData []byte, targetWidth, targetHeight int) ([]byte, error) {
 	}
 	resizedGif, err := resizeGIF(gifImg, targetWidth, targetHeight)
 	if err != nil {
-		panic(err)
+		return srcData, err
 	}
 
 	var buf bytes.Buffer
@@ -131,11 +135,14 @@ func ResizeGIF(srcData []byte, targetWidth, targetHeight int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// resizeGIF
+// resizeGIF is the core implementation for resizing GIF animations.
+// Note: Uses Blur + FloydSteinberg dithering which may produce visible noise on downscaling.
 func resizeGIF(g *gif.GIF, targetWidth, targetHeight int) (*gif.GIF, error) {
 	if g == nil || len(g.Image) == 0 {
 		return nil, nil
 	}
+
+	// Calculate the overall canvas size to handle frames with different bounds
 	canvasRect := image.Rect(0, 0, 0, 0)
 	for _, frame := range g.Image {
 		canvasRect = canvasRect.Union(frame.Bounds())
@@ -143,6 +150,7 @@ func resizeGIF(g *gif.GIF, targetWidth, targetHeight int) (*gif.GIF, error) {
 	canvasW := canvasRect.Dx()
 	canvasH := canvasRect.Dy()
 
+	// Calculate scale factor while maintaining aspect ratio
 	var scale float64 = 1.0
 	if targetWidth > 0 || targetHeight > 0 {
 		scaleX := math.Inf(1)
@@ -155,7 +163,7 @@ func resizeGIF(g *gif.GIF, targetWidth, targetHeight int) (*gif.GIF, error) {
 		}
 		scale = math.Min(scaleX, scaleY)
 		if scale > 1.0 {
-			scale = 1.0 // optional: prevent upscaling
+			scale = 1.0 // prevent upscaling
 		}
 	}
 
@@ -174,14 +182,14 @@ func resizeGIF(g *gif.GIF, targetWidth, targetHeight int) (*gif.GIF, error) {
 	}
 
 	for _, frame := range g.Image {
-		// Create full-size RGBA canvas
+		// Create full-size RGBA canvas to handle frame offsets
 		fullCanvas := image.NewRGBA(canvasRect)
 		draw.Draw(fullCanvas, frame.Bounds(), frame, frame.Bounds().Min, draw.Src)
 
-		// Resize full canvas
+		// Resize with blur to reduce aliasing (may introduce some noise)
 		scaled := imaging.Resize(imaging.Blur(fullCanvas, 0.5), newW, newH, imaging.Lanczos)
 
-		// Convert back to paletted
+		// Convert back to paletted image using FloydSteinberg dithering
 		pal := image.NewPaletted(scaled.Bounds(), frame.Palette)
 		draw.FloydSteinberg.Draw(pal, pal.Rect, scaled, image.Point{})
 
@@ -191,90 +199,16 @@ func resizeGIF(g *gif.GIF, targetWidth, targetHeight int) (*gif.GIF, error) {
 	return newGIF, nil
 }
 
-func (t *Image) parseImage(img image.Image, width, height int, mode Mode, options *Options) image.Image {
-	if options == nil {
-		options = &Options{}
-	}
-
-	if options.CropAnchor != nil && len(options.CropAnchor) == 4 {
-		if i, err := cropImageByAnchor(img, options.CropAnchor[0], options.CropAnchor[1], options.CropAnchor[2], options.CropAnchor[3]); err == nil {
-			img = i
-		}
-	}
-
-	if options.CropSide != nil && len(options.CropSide) == 4 {
-		if i, err := cropImageBySide(img, options.CropSide[0], options.CropSide[1], options.CropSide[2], options.CropSide[3]); err == nil {
-			img = i
-		}
-	}
-
-	if options.ScaleUpper != nil && len(options.ScaleUpper) >= 2 {
-		maxPixel := 0
-		if len(options.ScaleUpper) == 3 {
-			maxPixel = options.ScaleUpper[2]
-		}
-		if i, err := scaleImageWithRatio(img, options.ScaleUpper[0], options.ScaleUpper[1], maxPixel, false); err == nil {
-			img = i
-		}
-	}
-
-	if options.ScaleLower != nil && len(options.ScaleLower) >= 2 {
-		maxPixel := 0
-		if len(options.ScaleLower) == 3 {
-			maxPixel = options.ScaleLower[2]
-		}
-		if i, err := scaleImageWithRatio(img, options.ScaleLower[0], options.ScaleLower[1], maxPixel, true); err == nil {
-			img = i
-		}
-	}
-
-	if width > 0 || height > 0 {
-		w := img.Bounds().Dx()
-		h := img.Bounds().Dy()
-		nw, nh, resizeType := praseMode(mode, w, h, width, height)
-		switch resizeType {
-		case SCALE:
-			img = imaging.Resize(img, nw, nh, t.selectFilter())
-		case THUMBNAIL:
-			img = imaging.Fill(img, nw, nh, imaging.Center, t.selectFilter())
-		}
-	}
-
-	if options.Gray {
-		img = convertToGrayByImage(img)
-	}
-
-	if options.Invert {
-		img = invertByImage(img)
-	}
-
-	if options.Rotate != 0 {
-		img = rotateImage(img, options.Rotate)
-	}
-
-	if options.FlipH {
-		img = flipHImage(img)
-	}
-
-	if options.FlipV {
-		img = flipVImage(img)
-	}
-
-	if options.Blur > 0 {
-		img = blurGaussianImage(img, options.Blur)
-	}
-	return img
-}
-
+// Encode processes an image with resizing, cropping, effects, and format conversion.
 func (t *Image) Encode(srcData []byte, width, height int, mode Mode, options *Options) (destData []byte, err error) {
 	defer func() {
 		if er := recover(); er != nil {
 			err = errors.New(fmt.Sprint(er))
 		}
 	}()
-	img, itype, er := image.Decode(bytes.NewReader(srcData))
 
-	if er != nil {
+	img, itype, decodeErr := image.Decode(bytes.NewReader(srcData))
+	if decodeErr != nil {
 		return srcData, nil
 	}
 
@@ -329,23 +263,18 @@ func (t *Image) Encode(srcData []byte, width, height int, mode Mode, options *Op
 	if options.Gray {
 		img = convertToGrayByImage(img)
 	}
-
 	if options.Invert {
 		img = invertByImage(img)
 	}
-
 	if options.Rotate != 0 {
 		img = rotateImage(img, options.Rotate)
 	}
-
 	if options.FlipH {
 		img = flipHImage(img)
 	}
-
 	if options.FlipV {
 		img = flipVImage(img)
 	}
-
 	if options.Blur > 0 {
 		img = blurGaussianImage(img, options.Blur)
 	}
@@ -357,7 +286,6 @@ func (t *Image) Encode(srcData []byte, width, height int, mode Mode, options *Op
 	}
 
 	var buf bytes.Buffer
-
 	if itype == "" {
 		itype = imageType(srcData)
 	}
@@ -378,12 +306,14 @@ func (t *Image) Encode(srcData []byte, width, height int, mode Mode, options *Op
 	default:
 		return srcData, nil
 	}
-	if err == nil {
+
+	if err == nil && buf.Len() > 0 {
 		return buf.Bytes(), nil
 	}
-	return srcData, nil
+	return srcData, err
 }
 
+// selectFilter returns the corresponding imaging resample filter.
 func (t *Image) selectFilter() imaging.ResampleFilter {
 	switch t.ResizeFilter {
 	case NearestNeighbor:
@@ -421,6 +351,7 @@ func (t *Image) selectFilter() imaging.ResampleFilter {
 	}
 }
 
+// Resize is a convenience method to resize an image using the specified mode.
 func (t *Image) Resize(srcData []byte, width, height int, mode Mode) (destData []byte, err error) {
 	if width == 0 && height == 0 {
 		return srcData, nil
@@ -656,6 +587,8 @@ func getSideByThubnail(w, h, width, height int) (nw, nh int) {
 	return
 }
 
+// QualityByBinary compresses an image based on a quality level from 1 to 10.
+// It first decodes the binary data, then applies format-specific compression.
 func QualityByBinary(srcData []byte, quality int) (_r []byte, err error) {
 	if quality > 10 {
 		quality = quality%10 + 1
@@ -671,15 +604,17 @@ func QualityByBinary(srcData []byte, quality int) (_r []byte, err error) {
 	return
 }
 
+// Quality applies compression/optimization to an already decoded image.Image.
+// The quality parameter is normalized to 1-10 and mapped differently per format.
 func Quality(img image.Image, imagetype string, quality int) (_r []byte, err error) {
 	if quality > 10 {
 		quality = quality%10 + 1
 	}
 	buf := buffer.NewBuffer()
 	switch imagetype {
-	case "jpeg":
+	case "jpeg": // Map 1-10 to JPEG quality (roughly 10-75)
 		err = jpeg.Encode(buf, img, &jpeg.Options{Quality: int(float64(quality) * 7.5)})
-	case "png":
+	case "png": // Choose PNG compression level based on quality
 		level := png.BestCompression
 		if quality >= 8 {
 			level = png.BestSpeed
@@ -702,6 +637,23 @@ func Quality(img image.Image, imagetype string, quality int) (_r []byte, err err
 	} else {
 		return nil, err
 	}
+}
+
+// ConvertImage converts an image from one format to another.
+// If the source format is already the same as the target, it returns the original data.
+func ConvertImage(bs []byte, format string) ([]byte, error) {
+	img, itype, decodeErr := image.Decode(bytes.NewReader(bs))
+	if decodeErr != nil {
+		return nil, decodeErr
+	}
+	if itype == format {
+		return bs, nil
+	}
+	buf, err := convertImageFormat(img, format)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func convertImageFormat(img image.Image, format string) (buff bytes.Buffer, err error) {
